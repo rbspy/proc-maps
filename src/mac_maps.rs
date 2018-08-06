@@ -17,11 +17,11 @@ pub type Pid = pid_t;
 
 #[derive(Debug, Clone)]
 pub struct MapRange {
-    pub size: mach_vm_size_t,
-    pub info: vm_region_basic_info_data_t,
-    pub start: mach_vm_address_t,
-    pub count: mach_msg_type_number_t,
-    pub filename: Option<String>,
+    size: mach_vm_size_t,
+    info: vm_region_basic_info_data_t,
+    start: mach_vm_address_t,
+    count: mach_msg_type_number_t,
+    filename: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -65,9 +65,6 @@ impl MapRange {
     pub fn size(&self) -> usize { self.size as usize }
     pub fn start(&self) -> usize { self.start as usize }
     pub fn filename(&self) -> &Option<String> { &self.filename }
-    pub fn end(&self) -> mach_vm_address_t {
-        self.start + self.size as mach_vm_address_t
-    }
 
     pub fn is_read(&self) -> bool {
         self.info.protection & mach::vm_prot::VM_PROT_READ != 0
@@ -77,6 +74,10 @@ impl MapRange {
     }
     pub fn is_exec(&self) -> bool {
         self.info.protection & mach::vm_prot::VM_PROT_EXECUTE != 0
+    }
+
+    fn end(&self) -> mach_vm_address_t {
+        self.start + self.size as mach_vm_address_t
     }
 }
 

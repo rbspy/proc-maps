@@ -5,27 +5,38 @@ use std::io::Read;
 
 pub type Pid = libc::pid_t;
 
-
+/// A struct representing a single virtual memory region
+/// While this structure only is for Linux, the OSX and Windows
+/// variants have identical exposed methods
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapRange {
-    pub range_start: usize,
-    pub range_end: usize,
-    pub offset: usize,
-    pub dev: String,
-    pub flags: String,
-    pub inode: usize,
-    pub pathname: Option<String>,
+    range_start: usize,
+    range_end: usize,
+    offset: usize,
+    dev: String,
+    flags: String,
+    inode: usize,
+    pathname: Option<String>,
 }
 
 impl MapRange {
+    /// Returns the size of this MapRange in bytes
     pub fn size(&self) -> usize { self.range_end - self.range_start }
+    /// Returns the address this MapRange starts at
     pub fn start(&self) -> usize { self.range_start }
+    /// Returns the filename of the loaded module
     pub fn filename(&self) -> &Option<String> { &self.pathname }
+    /// Returns whether this range contains executable code
     pub fn is_exec(&self) -> bool { &self.flags[2..3] == "x" }
+    /// Returns whether this range contains writeable memory
     pub fn is_write(&self) -> bool { &self.flags[1..2] == "w" }
+    /// Returns whether this range contains readable memory
     pub fn is_read(&self) -> bool { &self.flags[0..1] == "r" }
 }
 
+/// Gets a Vec of [`MapRange`](linux_maps/struct.MapRange.html) structs for
+/// the passed in PID. (Note that while this function is for linux, the OSX
+/// and Windows variants have the same interface)
 pub fn get_process_maps(pid: Pid) -> std::io::Result<Vec<MapRange>> {
     // Parses /proc/PID/maps into a Vec<MapRange>
     let maps_file = format!("/proc/{}/maps", pid);

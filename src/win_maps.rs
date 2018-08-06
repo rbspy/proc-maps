@@ -41,9 +41,9 @@ extern "system" {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapRange {
-    pub base_addr: usize,
-    pub base_size: usize,
-    pub pathname: Option<String>
+    base_addr: usize,
+    base_size: usize,
+    pathname: Option<String>
 }
 
 impl MapRange  {
