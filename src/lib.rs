@@ -13,11 +13,11 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use proc_maps::{get_process_maps, MapRange};
+//! use proc_maps::{get_process_maps, MapRange, Pid};
 //!
-//! let maps = get_process_maps(pid)?;
+//! let maps = get_process_maps(123456 as Pid).unwrap();
 //! for map in maps {
-//!    println!("Filename {} Address {} Size {}", map.filename(), map.start(), map.size());
+//!    println!("Filename {:?} Address {} Size {}", map.filename(), map.start(), map.size());
 //! }
 //! ```
 
