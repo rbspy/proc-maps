@@ -1,3 +1,26 @@
+//! Get virtual memory maps from another process
+//!
+//! This crate provides a function—[`get_process_maps`](fn.get_process_maps.html)
+//! that returns a Vec of [`MapRange`](struct.MapRange) structs.
+//!
+//! This code works on Linux, OSX and Windows. Each operating system has different
+//! implementations, but the functions and struct's for each OS share the same
+//! interface - so this can be used generically across operating systems.
+//!
+//! Note: on OSX this requires root access, and even with root will still not
+//! work on processes that have System Integrity Protection enabled
+//!
+//! # Example
+//!
+//! ```rust,no_run
+//! use proc_maps::{get_process_maps, MapRange};
+//!
+//! let maps = get_process_maps(pid)?;
+//! for map in maps {
+//!    println!("Filename {} Address {} Size {}", map.filename(), map.start(), map.size());
+//! }
+//! ```
+
 extern crate libc;
 extern crate failure;
 
@@ -29,6 +52,8 @@ fn map_contain_addr(map: &MapRange, addr: usize) -> bool {
     (addr > start) && (addr < (start + map.size()))
 }
 
+/// Returns whether or not any MapRange contains the given address
+/// Note: this will only work correctly on OSX and Linux.
 pub fn maps_contain_addr(addr: usize, maps: &[MapRange]) -> bool {
     maps.iter().any({ |map| map_contain_addr(map, addr) })
 }

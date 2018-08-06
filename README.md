@@ -1,5 +1,7 @@
 proc-maps
 =========
+[![Build Status](https://travis-ci.org/benfred/proc-maps.svg?branch=master)](https://travis-ci.org/benfred/proc-maps)
+[![Windows Build status](https://ci.appveyor.com/api/projects/status/rbu08ejt9telrw9s?svg=true)](https://ci.appveyor.com/project/benfred/proc-maps)
 
 This crate supports reading virtual memory maps from another process - and supports
 Linux OSX and Windows operating systems.
