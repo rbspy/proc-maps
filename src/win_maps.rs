@@ -5,14 +5,39 @@ use libc::wcslen;
 use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 
-use winapi::shared::minwindef::{FALSE, DWORD};
-use winapi::um::dbghelp::{SYMBOL_INFOW, SymInitializeW, SymCleanup, SymLoadModuleExW, SymFromNameW, SymUnloadModule64 };
+use winapi::shared::basetsd::DWORD64;
+use winapi::shared::minwindef::{FALSE, DWORD, BOOL};
+use winapi::um::dbghelp::{PSYMBOL_INFOW, SYMBOL_INFOW, SymInitializeW, SymCleanup, PMODLOAD_DATA};
 use winapi::um::handleapi::{INVALID_HANDLE_VALUE, CloseHandle};
 use winapi::um::processthreadsapi::OpenProcess;
 use winapi::um::tlhelp32::{CreateToolhelp32Snapshot, TH32CS_SNAPMODULE, MODULEENTRY32W, Module32FirstW, Module32NextW};
-use winapi::um::winnt::{HANDLE, PROCESS_VM_READ};
+use winapi::um::winnt::{HANDLE, PROCESS_VM_READ, PCWSTR};
 
 pub type Pid = u32;
+
+// TODO: once this winapi-rs PR is merged (and on crates.io) this section can be removed
+// https://github.com/retep998/winapi-rs/pull/653
+extern "system" {
+    pub fn SymLoadModuleExW(
+        hProcess: HANDLE,
+        hFile: HANDLE,
+        ImageName: PCWSTR,
+        ModuleName: PCWSTR,
+        BaseOfDll: DWORD64,
+        SizeOfDll: DWORD,
+        Data: PMODLOAD_DATA,
+        Flags: DWORD
+    ) -> DWORD64;
+    pub fn SymFromNameW(
+        hProcess: HANDLE,
+        Name: PCWSTR,
+        Symbol: PSYMBOL_INFOW
+    ) -> BOOL;
+    pub fn SymUnloadModule64(
+        hProcess: HANDLE,
+        BaseOfDll: DWORD64
+    ) -> BOOL;
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapRange {

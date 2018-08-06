@@ -16,4 +16,4 @@ mach = "0.1.2"
 libproc = "0.3.1"
 
 [target.'cfg(windows)'.dependencies]
-winapi = {git = "https://github.com/benfred/winapi-rs.git", branch= "0.3", features = ["tlhelp32", "processthreadsapi", "handleapi", "impl-default", "dbghelp"]}
+winapi = {version = "0.3", features = ["tlhelp32", "processthreadsapi", "handleapi", "impl-default", "dbghelp"]}
