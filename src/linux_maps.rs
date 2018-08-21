@@ -109,4 +109,8 @@ fn test_parse_maps() {
         },
     ];
     assert_eq!(vec, expected);
+
+    // Also check that maps_contain_addr works as expected
+    assert_eq!(super::maps_contain_addr(0x00400000, &vec), true);
+    assert_eq!(super::maps_contain_addr(0x00300000, &vec), false);
 }

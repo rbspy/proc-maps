@@ -50,7 +50,7 @@ pub use win_maps::{get_process_maps, MapRange, Pid};
 
 fn map_contain_addr(map: &MapRange, addr: usize) -> bool {
     let start = map.start();
-    (addr > start) && (addr < (start + map.size()))
+    (addr >= start) && (addr < (start + map.size()))
 }
 
 /// Returns whether or not any MapRange contains the given address
