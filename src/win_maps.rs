@@ -10,7 +10,8 @@ use winapi::shared::minwindef::{FALSE, DWORD, BOOL};
 use winapi::um::dbghelp::{PSYMBOL_INFOW, SYMBOL_INFOW, SymInitializeW, SymCleanup, PMODLOAD_DATA};
 use winapi::um::handleapi::{INVALID_HANDLE_VALUE, CloseHandle};
 use winapi::um::processthreadsapi::OpenProcess;
-use winapi::um::tlhelp32::{CreateToolhelp32Snapshot, TH32CS_SNAPMODULE, MODULEENTRY32W, Module32FirstW, Module32NextW};
+use winapi::um::tlhelp32::{CreateToolhelp32Snapshot, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32};
+use winapi::um::tlhelp32::{MODULEENTRY32W, Module32FirstW, Module32NextW};
 use winapi::um::winnt::{HANDLE, PROCESS_VM_READ, PCWSTR};
 
 pub type Pid = u32;
@@ -57,7 +58,7 @@ impl MapRange  {
 
 pub fn get_process_maps(pid: Pid) -> io::Result<Vec<MapRange>> {
     unsafe {
-        let handle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
+        let handle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
         if handle == INVALID_HANDLE_VALUE {
             return Err(io::Error::last_os_error());
         }
