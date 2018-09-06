@@ -1,7 +1,11 @@
 use libc;
+use regex::bytes::{Regex, RegexBuilder};
 use std;
+use std::str;
 use std::fs::File;
-use std::io::Read;
+use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
+use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use MapRangeImpl;
 
@@ -14,10 +18,10 @@ pub type Pid = libc::pid_t;
 pub struct MapRange {
     range_start: usize,
     range_end: usize,
-    offset: usize,
-    dev: String,
-    flags: String,
-    inode: usize,
+    offset: u64,
+    dev: (u32, u32),
+    perms: Vec<u8>,
+    inode: u64,
     pathname: Option<PathBuf>,
 }
 
@@ -28,11 +32,11 @@ impl MapRangeImpl for MapRange {
 
     fn filename(&self) -> Option<&Path> { self.pathname.as_ref().map(|path| path.as_path()) }
 
-    fn is_exec(&self) -> bool { &self.flags[2..3] == "x" }
+    fn is_exec(&self) -> bool { self.perms[2] == b'x' }
 
-    fn is_write(&self) -> bool { &self.flags[1..2] == "w" }
+    fn is_write(&self) -> bool { self.perms[1] == b'w' }
 
-    fn is_read(&self) -> bool { &self.flags[0..1] == "r" }
+    fn is_read(&self) -> bool { self.perms[0] == b'r' }
 }
 
 /// Gets a Vec of [`MapRange`](linux_maps/struct.MapRange.html) structs for
@@ -41,52 +45,111 @@ impl MapRangeImpl for MapRange {
 pub fn get_process_maps(pid: Pid) -> std::io::Result<Vec<MapRange>> {
     // Parses /proc/PID/maps into a Vec<MapRange>
     let maps_file = format!("/proc/{}/maps", pid);
-    let mut file = File::open(maps_file)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(parse_proc_maps(&contents))
+    let file = io::BufReader::new(File::open(maps_file)?);
+    parse_proc_maps(file)
 }
 
-fn parse_proc_maps(contents: &str) -> Vec<MapRange> {
+
+fn parse_proc_maps<R: BufRead>(mut reader: R) -> io::Result<Vec<MapRange>> {
+    lazy_static! {
+        static ref LINE_REGEX: Regex = RegexBuilder::new(concat!(
+            // Beginning of line
+            "^",
+            // Address Range
+            "([0-9a-f]+)-([0-9a-f]+)", "[ \t]+",
+            // Perms read, write, execute, and private/shared
+            "([-r][-w][-x][ps])", "[ \t]+",
+            // Offset
+            "([0-9a-f]+)", "[ \t]+",
+            // Dev (major:minor)
+            "([0-9]+):([0-9]+)", "[ \t]+",
+            // Inode (may not be a final field, space is optional)
+            "([0-9]+)", "[ \t]*",
+            "(.*)",
+        )).case_insensitive(true).build().unwrap();
+    }
+
+    macro_rules! parse_byte_str {
+        ($hex_iter:expr, $t:tt) => (
+            parse_byte_str!($hex_iter, $t, 16)
+        );
+        ($hex_iter:expr, $t:tt, $radix:expr) => (
+            // Safe because we validated all bytes are [0-9a-f], and all fields always participate
+            $t::from_str_radix(unsafe { str::from_utf8_unchecked($hex_iter.next().unwrap().unwrap().as_bytes()) }, $radix)
+        );
+    }
+
     let mut vec: Vec<MapRange> = Vec::new();
-    for line in contents.split("\n") {
-        let mut split = line.split_whitespace();
-        let range = split.next();
-        if range == None {
+    let mut line: Vec<u8> = Vec::new();
+    loop {
+        let bytes_read = reader.read_until(b'\n', &mut line)?;
+        if bytes_read == 0 {
             break;
         }
-        let mut range_split = range.unwrap().split("-");
-        let range_start = range_split.next().unwrap();
-        let range_end = range_split.next().unwrap();
-        let flags = split.next().unwrap();
-        let offset = split.next().unwrap();
-        let dev = split.next().unwrap();
-        let inode = split.next().unwrap();
+        if let Some(captures) = LINE_REGEX.captures(&line) {
+            let mut matches_iter = captures.iter();
+            // Eat 0th match
+            matches_iter.next().unwrap();
+            let range_start = match parse_byte_str!(matches_iter, usize) {
+                Ok(val) => val,
+                Err(_) => continue,
+            };
+            let range_end = match parse_byte_str!(matches_iter, usize) {
+                Ok(val) => val,
+                Err(_) => continue,
+            };
+            let perms = matches_iter.next().unwrap().unwrap().as_bytes().to_vec();
+            let offset = match parse_byte_str!(matches_iter, u64) {
+                Ok(val) => val,
+                Err(_) => continue,
+            };
+            let major = match parse_byte_str!(matches_iter, u32, 10) {
+                Ok(val) => val,
+                Err(_) => continue,
+            };
+            let minor = match parse_byte_str!(matches_iter, u32, 10) {
+                Ok(val) => val,
+                Err(_) => continue,
+            };
+            let dev = (major, minor);
+            let inode = match parse_byte_str!(matches_iter, u64, 10) {
+                Ok(val) => val,
+                Err(_) => continue,
+            };
 
-        vec.push(MapRange {
-            range_start: usize::from_str_radix(range_start, 16).unwrap(),
-            range_end: usize::from_str_radix(range_end, 16).unwrap(),
-            offset: usize::from_str_radix(offset, 16).unwrap(),
-            dev: dev.to_string(),
-            flags: flags.to_string(),
-            inode: usize::from_str_radix(inode, 10).unwrap(),
-            pathname: split.next().map(|x| PathBuf::from(x)),
-        });
+            let pathname = matches_iter.next().unwrap().unwrap().as_bytes();
+            let pathname = if !pathname.is_empty() {
+                Some(PathBuf::from(OsStr::from_bytes(pathname)))
+            } else {
+                None
+            };
+
+            vec.push(MapRange {
+                range_start,
+                range_end,
+                offset,
+                dev,
+                perms,
+                inode,
+                pathname,
+            });
+        }
+        line.clear();
     }
-    vec
+    Ok(vec)
 }
 
 #[test]
 fn test_parse_maps() {
-    let contents = include_str!("../ci/testdata/map.txt");
-    let vec = parse_proc_maps(contents);
+    let contents = include_bytes!("../ci/testdata/map.txt");
+    let vec = parse_proc_maps(&contents[..]).unwrap();
     let expected = vec![
         MapRange {
             range_start: 0x00400000,
             range_end: 0x00507000,
             offset: 0,
-            dev: "00:14".to_string(),
-            flags: "r-xp".to_string(),
+            dev: (0, 14),
+            perms: b"r-xp".to_vec(),
             inode: 205736,
             pathname: Some(PathBuf::from("/usr/bin/fish")),
         },
@@ -94,8 +157,8 @@ fn test_parse_maps() {
             range_start: 0x00708000,
             range_end: 0x0070a000,
             offset: 0,
-            dev: "00:00".to_string(),
-            flags: "rw-p".to_string(),
+            dev: (0, 0),
+            perms: b"rw-p".to_vec(),
             inode: 0,
             pathname: None,
         },
@@ -103,8 +166,8 @@ fn test_parse_maps() {
             range_start: 0x0178c000,
             range_end: 0x01849000,
             offset: 0,
-            dev: "00:00".to_string(),
-            flags: "rw-p".to_string(),
+            dev: (0, 0),
+            perms: b"rw-p".to_vec(),
             inode: 0,
             pathname: Some(PathBuf::from("[heap]")),
         },

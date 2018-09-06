@@ -15,5 +15,9 @@ failure = "0.1.1"
 mach = "0.1.2"
 libproc = "0.3.1"
 
+[target.'cfg(target_os="linux")'.dependencies]
+regex = "1.0"
+lazy_static = "1.1"
+
 [target.'cfg(windows)'.dependencies]
 winapi = {version = "0.3", features = ["tlhelp32", "processthreadsapi", "handleapi", "impl-default", "dbghelp"]}

@@ -29,6 +29,11 @@ extern crate failure;
 extern crate mach;
 #[cfg(target_os = "macos")]
 extern crate libproc;
+#[cfg(target_os = "linux")]
+extern crate regex;
+#[cfg(target_os = "linux")]
+#[macro_use]
+extern crate lazy_static;
 #[cfg(windows)]
 extern crate winapi;
 
