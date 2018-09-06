@@ -4,6 +4,8 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+use MapRangeImpl;
+
 pub type Pid = libc::pid_t;
 
 /// A struct representing a single virtual memory region.
@@ -21,29 +23,23 @@ pub struct MapRange {
     pathname: Option<PathBuf>,
 }
 
-impl MapRange {
-    /// Returns the size of this MapRange in bytes
-    pub fn size(&self) -> usize {
+impl MapRangeImpl for MapRange {
+    fn size(&self) -> usize {
         self.range_end - self.range_start
     }
-    /// Returns the address this MapRange starts at
-    pub fn start(&self) -> usize {
+    fn start(&self) -> usize {
         self.range_start
     }
-    /// Returns the filename of the loaded module
-    pub fn filename(&self) -> Option<&Path> {
+    fn filename(&self) -> Option<&Path> {
         self.pathname.as_deref()
     }
-    /// Returns whether this range contains executable code
-    pub fn is_exec(&self) -> bool {
+    fn is_exec(&self) -> bool {
         &self.flags[2..3] == "x"
     }
-    /// Returns whether this range contains writeable memory
-    pub fn is_write(&self) -> bool {
+    fn is_write(&self) -> bool {
         &self.flags[1..2] == "w"
     }
-    /// Returns whether this range contains readable memory
-    pub fn is_read(&self) -> bool {
+    fn is_read(&self) -> bool {
         &self.flags[0..1] == "r"
     }
 }

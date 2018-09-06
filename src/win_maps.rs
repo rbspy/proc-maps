@@ -4,7 +4,6 @@ use std::io;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
-
 use winapi::shared::minwindef::{DWORD, FALSE};
 use winapi::um::dbghelp::{
     SymCleanup, SymFromNameW, SymInitializeW, SymLoadModuleExW, SymUnloadModule64, SYMBOL_INFOW,
@@ -15,6 +14,8 @@ use winapi::um::tlhelp32::{CreateToolhelp32Snapshot, TH32CS_SNAPMODULE, TH32CS_S
 use winapi::um::tlhelp32::{Module32FirstW, Module32NextW, MODULEENTRY32W};
 use winapi::um::winnt::{HANDLE, PROCESS_VM_READ};
 
+use MapRangeImpl;
+
 pub type Pid = u32;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,23 +25,23 @@ pub struct MapRange {
     pathname: Option<PathBuf>,
 }
 
-impl MapRange {
-    pub fn size(&self) -> usize {
+impl MapRangeImpl for MapRange {
+    fn size(&self) -> usize {
         self.base_size
     }
-    pub fn start(&self) -> usize {
+    fn start(&self) -> usize {
         self.base_addr
     }
-    pub fn filename(&self) -> Option<&Path> {
+    fn filename(&self) -> Option<&Path> {
         self.pathname.as_deref()
     }
-    pub fn is_exec(&self) -> bool {
+    fn is_exec(&self) -> bool {
         true
     }
-    pub fn is_write(&self) -> bool {
+    fn is_write(&self) -> bool {
         true
     }
-    pub fn is_read(&self) -> bool {
+    fn is_read(&self) -> bool {
         true
     }
 }

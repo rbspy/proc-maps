@@ -16,6 +16,8 @@ use std::io;
 use std::mem;
 use std::path::{Path, PathBuf};
 
+use MapRangeImpl;
+
 mod dyld_bindings;
 use self::dyld_bindings::{
     dyld_all_image_infos, dyld_image_info, mach_header_64, segment_command_64,
@@ -70,27 +72,29 @@ pub fn get_symbols(filename: &str) -> Result<Vec<Symbol>, Error> {
     Ok(parse_nm_output(&String::from_utf8_lossy(&output.stdout)))
 }
 
-impl MapRange {
-    pub fn size(&self) -> usize {
+impl MapRangeImpl for MapRange {
+    fn size(&self) -> usize {
         self.size as usize
     }
-    pub fn start(&self) -> usize {
+    fn start(&self) -> usize {
         self.start as usize
     }
-    pub fn filename(&self) -> Option<&Path> {
+    fn filename(&self) -> Option<&Path> {
         self.filename.as_deref()
     }
 
-    pub fn is_read(&self) -> bool {
-        self.info.protection & mach::vm_prot::VM_PROT_READ != 0
-    }
-    pub fn is_write(&self) -> bool {
-        self.info.protection & mach::vm_prot::VM_PROT_WRITE != 0
-    }
-    pub fn is_exec(&self) -> bool {
+    fn is_exec(&self) -> bool {
         self.info.protection & mach::vm_prot::VM_PROT_EXECUTE != 0
     }
+    fn is_write(&self) -> bool {
+        self.info.protection & mach::vm_prot::VM_PROT_WRITE != 0
+    }
+    fn is_read(&self) -> bool {
+        self.info.protection & mach::vm_prot::VM_PROT_READ != 0
+    }
+}
 
+impl MapRange {
     fn end(&self) -> mach_vm_address_t {
         self.start + self.size as mach_vm_address_t
     }

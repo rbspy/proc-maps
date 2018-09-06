@@ -8,6 +8,8 @@ use std::convert::From;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 
+use MapRangeImpl;
+
 pub type Pid = pid_t;
 
 #[derive(Debug, Clone)]
@@ -20,24 +22,23 @@ pub struct MapRange {
     pathname: Option<PathBuf>,
 }
 
-impl MapRange {
-    pub fn size(&self) -> usize {
+impl MapRangeImpl for MapRange {
+    fn size(&self) -> usize {
         self.range_end - self.range_start
     }
-    pub fn start(&self) -> usize {
+    fn start(&self) -> usize {
         self.range_start
     }
-    pub fn filename(&self) -> Option<&Path> {
+    fn filename(&self) -> Option<&Path> {
         self.pathname.as_deref()
     }
-
-    pub fn is_read(&self) -> bool {
+    fn is_read(&self) -> bool {
         self.protection & protection::VM_PROT_READ != 0
     }
-    pub fn is_write(&self) -> bool {
+    fn is_write(&self) -> bool {
         self.protection & protection::VM_PROT_WRITE != 0
     }
-    pub fn is_exec(&self) -> bool {
+    fn is_exec(&self) -> bool {
         self.protection & protection::VM_PROT_EXECUTE != 0
     }
 }
