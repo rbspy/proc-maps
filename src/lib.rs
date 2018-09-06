@@ -109,3 +109,7 @@ fn map_contain_addr(map: &MapRange, addr: usize) -> bool {
 pub fn maps_contain_addr(addr: usize, maps: &[MapRange]) -> bool {
     maps.iter().any({ |map| map_contain_addr(map, addr) })
 }
+
+/// Check that get_process_maps is a function with the correct signature
+#[allow(dead_code)]
+const PROCESS_MAPS_TYPE_CHECK: fn(Pid) -> std::io::Result<Vec<MapRange>> = get_process_maps;
