@@ -1,6 +1,7 @@
 use std;
 use std::io;
 use std::mem;
+use std::path::{Path, PathBuf};
 use failure::Error;
 use libc::{c_int, pid_t, strlen};
 use mach::kern_return::{KERN_SUCCESS, kern_return_t};
@@ -25,7 +26,7 @@ pub struct MapRange {
     info: vm_region_basic_info_data_t,
     start: mach_vm_address_t,
     count: mach_msg_type_number_t,
-    filename: Option<String>,
+    filename: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,7 +69,7 @@ pub fn get_symbols(filename: &str) -> Result<Vec<Symbol>, Error> {
 impl MapRangeImpl for MapRange {
     fn size(&self) -> usize { self.size as usize }
     fn start(&self) -> usize { self.start as usize }
-    fn filename(&self) -> &Option<String> { &self.filename }
+    fn filename(&self) -> Option<&Path> { self.filename.as_ref().map(|path| path.as_path()) }
 
     fn is_exec(&self) -> bool {
         self.info.protection & mach::vm_prot::VM_PROT_EXECUTE != 0
@@ -133,10 +134,7 @@ fn mach_vm_region(
     if result != KERN_SUCCESS {
         return None;
     }
-    let filename = match regionfilename(pid, address) {
-        Ok(x) => Some(x),
-        _ => None,
-    };
+    let filename = regionfilename(pid, address).ok();
     Some(MapRange{size, info, start: address, count, filename})
 }
 

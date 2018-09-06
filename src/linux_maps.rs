@@ -2,6 +2,7 @@ use libc;
 use std;
 use std::fs::File;
 use std::io::Read;
+use std::path::{Path, PathBuf};
 use MapRangeImpl;
 
 pub type Pid = libc::pid_t;
@@ -17,7 +18,7 @@ pub struct MapRange {
     dev: String,
     flags: String,
     inode: usize,
-    pathname: Option<String>,
+    pathname: Option<PathBuf>,
 }
 
 impl MapRangeImpl for MapRange {
@@ -25,7 +26,7 @@ impl MapRangeImpl for MapRange {
 
     fn start(&self) -> usize { self.range_start }
 
-    fn filename(&self) -> &Option<String> { &self.pathname }
+    fn filename(&self) -> Option<&Path> { self.pathname.as_ref().map(|path| path.as_path()) }
 
     fn is_exec(&self) -> bool { &self.flags[2..3] == "x" }
 
@@ -69,7 +70,7 @@ fn parse_proc_maps(contents: &str) -> Vec<MapRange> {
             dev: dev.to_string(),
             flags: flags.to_string(),
             inode: usize::from_str_radix(inode, 10).unwrap(),
-            pathname: split.next().map(|x| x.to_string()),
+            pathname: split.next().map(|x| PathBuf::from(x)),
         });
     }
     vec
@@ -87,7 +88,7 @@ fn test_parse_maps() {
             dev: "00:14".to_string(),
             flags: "r-xp".to_string(),
             inode: 205736,
-            pathname: Some("/usr/bin/fish".to_string()),
+            pathname: Some(PathBuf::from("/usr/bin/fish")),
         },
         MapRange {
             range_start: 0x00708000,
@@ -105,7 +106,7 @@ fn test_parse_maps() {
             dev: "00:00".to_string(),
             flags: "rw-p".to_string(),
             inode: 0,
-            pathname: Some("[heap]".to_string()),
+            pathname: Some(PathBuf::from("[heap]")),
         },
     ];
     assert_eq!(vec, expected);

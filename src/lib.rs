@@ -47,6 +47,8 @@ pub mod win_maps;
 #[cfg(windows)]
 pub use win_maps::{get_process_maps, MapRange, Pid};
 
+use std::path::Path;
+
 /// Trait to implement on MapRange, to provide an implementation.
 ///
 /// By using a private trait, and providing an inherent implementation, we ensure the provided methods
@@ -57,7 +59,7 @@ trait MapRangeImpl {
     /// Returns the address this MapRange starts at
     fn start(&self) -> usize;
     /// Returns the filename of the loaded module
-    fn filename(&self) -> &Option<String>;
+    fn filename(&self) -> Option<&Path>;
     /// Returns whether this range contains executable code
     fn is_exec(&self) -> bool;
     /// Returns whether this range contains writeable memory
@@ -79,7 +81,7 @@ impl MapRange {
     }
     /// Returns the filename of the loaded module
     #[inline]
-    pub fn filename(&self) -> &Option<String> {
+    pub fn filename(&self) -> Option<&Path> {
         MapRangeImpl::filename(self)
     }
     /// Returns whether this range contains executable code
