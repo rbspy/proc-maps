@@ -4,6 +4,7 @@ use std::io;
 use libc::wcslen;
 use std::ffi::{OsStr, OsString};
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use MapRangeImpl;
 
 use winapi::shared::basetsd::DWORD64;
 use winapi::shared::minwindef::{FALSE, DWORD, BOOL};
@@ -47,13 +48,13 @@ pub struct MapRange {
     pathname: Option<String>
 }
 
-impl MapRange  {
-    pub fn size(&self) -> usize { self.base_size }
-    pub fn start(&self) -> usize { self.base_addr }
-    pub fn filename(&self) -> &Option<String> { &self.pathname }
-    pub fn is_exec(&self) -> bool { true }
-    pub fn is_write(&self) -> bool { true }
-    pub fn is_read(&self) -> bool { true }
+impl MapRangeImpl for MapRange {
+    fn size(&self) -> usize { self.base_size }
+    fn start(&self) -> usize { self.base_addr }
+    fn filename(&self) -> &Option<String> { &self.pathname }
+    fn is_exec(&self) -> bool { true }
+    fn is_write(&self) -> bool { true }
+    fn is_read(&self) -> bool { true }
 }
 
 pub fn get_process_maps(pid: Pid) -> io::Result<Vec<MapRange>> {

@@ -12,6 +12,7 @@ use mach::vm_region::{vm_region_basic_info_data_t, vm_region_info_t,
 use mach::types::vm_task_entry_t;
 use libproc::libproc::proc_pid::regionfilename;
 use mach;
+use MapRangeImpl;
 
 mod dyld_bindings;
 use self::dyld_bindings::{dyld_all_image_infos, dyld_image_info, mach_header_64, segment_command_64};
@@ -64,21 +65,23 @@ pub fn get_symbols(filename: &str) -> Result<Vec<Symbol>, Error> {
     Ok(parse_nm_output(&String::from_utf8_lossy(&output.stdout)))
 }
 
-impl MapRange {
-    pub fn size(&self) -> usize { self.size as usize }
-    pub fn start(&self) -> usize { self.start as usize }
-    pub fn filename(&self) -> &Option<String> { &self.filename }
+impl MapRangeImpl for MapRange {
+    fn size(&self) -> usize { self.size as usize }
+    fn start(&self) -> usize { self.start as usize }
+    fn filename(&self) -> &Option<String> { &self.filename }
 
-    pub fn is_read(&self) -> bool {
-        self.info.protection & mach::vm_prot::VM_PROT_READ != 0
-    }
-    pub fn is_write(&self) -> bool {
-        self.info.protection & mach::vm_prot::VM_PROT_WRITE != 0
-    }
-    pub fn is_exec(&self) -> bool {
+    fn is_exec(&self) -> bool {
         self.info.protection & mach::vm_prot::VM_PROT_EXECUTE != 0
     }
+    fn is_write(&self) -> bool {
+        self.info.protection & mach::vm_prot::VM_PROT_WRITE != 0
+    }
+    fn is_read(&self) -> bool {
+        self.info.protection & mach::vm_prot::VM_PROT_READ != 0
+    }
+}
 
+impl MapRange {
     fn end(&self) -> mach_vm_address_t {
         self.start + self.size as mach_vm_address_t
     }

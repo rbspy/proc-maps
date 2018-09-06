@@ -47,6 +47,57 @@ pub mod win_maps;
 #[cfg(windows)]
 pub use win_maps::{get_process_maps, MapRange, Pid};
 
+/// Trait to implement on MapRange, to provide an implementation.
+///
+/// By using a private trait, and providing an inherent implementation, we ensure the provided methods
+/// are the same for windows/linux/osx
+trait MapRangeImpl {
+    /// Returns the size of this MapRange in bytes
+    fn size(&self) -> usize;
+    /// Returns the address this MapRange starts at
+    fn start(&self) -> usize;
+    /// Returns the filename of the loaded module
+    fn filename(&self) -> &Option<String>;
+    /// Returns whether this range contains executable code
+    fn is_exec(&self) -> bool;
+    /// Returns whether this range contains writeable memory
+    fn is_write(&self) -> bool;
+    /// Returns whether this range contains readable memory
+    fn is_read(&self) -> bool;
+}
+
+impl MapRange {
+    /// Returns the size of this MapRange in bytes
+    #[inline]
+    pub fn size(&self) -> usize {
+        MapRangeImpl::size(self)
+    }
+    /// Returns the address this MapRange starts at
+    #[inline]
+    pub fn start(&self) -> usize {
+        MapRangeImpl::start(self)
+    }
+    /// Returns the filename of the loaded module
+    #[inline]
+    pub fn filename(&self) -> &Option<String> {
+        MapRangeImpl::filename(self)
+    }
+    /// Returns whether this range contains executable code
+    #[inline]
+    pub fn is_exec(&self) -> bool {
+        MapRangeImpl::is_exec(self)
+    }
+    /// Returns whether this range contains writeable memory
+    #[inline]
+    pub fn is_write(&self) -> bool {
+        MapRangeImpl::is_write(self)
+    }
+    /// Returns whether this range contains readable memory
+    #[inline]
+    pub fn is_read(&self) -> bool {
+        MapRangeImpl::is_read(self)
+    }
+}
 
 fn map_contain_addr(map: &MapRange, addr: usize) -> bool {
     let start = map.start();
