@@ -12,10 +12,10 @@ pub type Pid = libc::pid_t;
 pub struct MapRange {
     range_start: usize,
     range_end: usize,
-    offset: usize,
-    dev: String,
-    flags: String,
-    inode: usize,
+    pub offset: usize,
+    pub dev: String,
+    pub flags: String,
+    pub inode: usize,
     pathname: Option<String>,
 }
 
