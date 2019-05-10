@@ -8,7 +8,7 @@ homepage = "https://github.com/benfred/proc-maps"
 repository = "https://github.com/benfred/proc-maps"
 
 [dependencies]
-libc = "0.2.34"
+libc = "0.2.54"
 failure = "0.1.1"
 
 [target.'cfg(target_os="macos")'.dependencies]

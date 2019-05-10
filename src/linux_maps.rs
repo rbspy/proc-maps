@@ -6,7 +6,7 @@ use std::io::Read;
 pub type Pid = libc::pid_t;
 
 /// A struct representing a single virtual memory region
-/// While this structure only is for Linux, the OSX and Windows
+/// While this structure only is for Linux, the OSX, Windows, and FreeBSD
 /// variants have identical exposed methods
 #[derive(Debug, Clone, PartialEq)]
 pub struct MapRange {
@@ -35,8 +35,8 @@ impl MapRange {
 }
 
 /// Gets a Vec of [`MapRange`](linux_maps/struct.MapRange.html) structs for
-/// the passed in PID. (Note that while this function is for linux, the OSX
-/// and Windows variants have the same interface)
+/// the passed in PID. (Note that while this function is for linux, the OSX,
+/// Windows, and FreeBSD variants have the same interface)
 pub fn get_process_maps(pid: Pid) -> std::io::Result<Vec<MapRange>> {
     // Parses /proc/PID/maps into a Vec<MapRange>
     let maps_file = format!("/proc/{}/maps", pid);
