@@ -47,6 +47,10 @@ pub mod win_maps;
 #[cfg(windows)]
 pub use win_maps::{get_process_maps, MapRange, Pid};
 
+#[cfg(target_os = "freebsd")]
+pub mod freebsd_maps;
+#[cfg(target_os = "freebsd")]
+pub use freebsd_maps::{get_process_maps, MapRange, Pid};
 
 fn map_contain_addr(map: &MapRange, addr: usize) -> bool {
     let start = map.start();
