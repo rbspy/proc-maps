@@ -57,6 +57,20 @@ struct VmEntryIterator {
     pid: Pid,
 }
 
+impl VmEntryIterator {
+    fn new(pid: Pid) -> std::io::Result<Self> {
+        ptrace::attach(pid)?;
+
+        Ok(Self { current: 0, pid })
+    }
+}
+
+impl Drop for VmEntryIterator {
+    fn drop(&mut self) {
+        ptrace::detach(self.pid);
+    }
+}
+
 impl Iterator for VmEntryIterator {
     type Item = ptrace::vm_entry;
 
@@ -66,10 +80,6 @@ impl Iterator for VmEntryIterator {
         let pve_pathlen = 4096;
         let pve_path: [c_char; FILE_NAME_BUFFER_LENGTH] =
             [0; FILE_NAME_BUFFER_LENGTH];
-
-        if current == 0 {
-            ptrace::attach(pid).ok()?;
-        }
 
         let entry = Self::Item {
             pve_entry: current,
@@ -85,10 +95,7 @@ impl Iterator for VmEntryIterator {
                 self.current = entry.pve_entry;
                 Some(entry)
             }
-            _ => {
-                ptrace::detach(pid).ok()?;
-                None
-            }
+            _ => None
         }
     }
 }
@@ -112,10 +119,7 @@ fn string_from_cstr_ptr(pointer: *const c_char) -> Option<String> {
 }
 
 pub fn get_process_maps(pid: Pid) -> std::io::Result<Vec<MapRange>> {
-    let iter = VmEntryIterator {
-        current: 0,
-        pid: pid,
-    };
+    let iter = VmEntryIterator::new(pid)?;
 
     Ok(iter.map(MapRange::from).collect())
 }
