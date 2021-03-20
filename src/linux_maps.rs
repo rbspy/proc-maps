@@ -69,7 +69,7 @@ fn parse_proc_maps(contents: &str) -> Vec<MapRange> {
             dev: dev.to_string(),
             flags: flags.to_string(),
             inode: usize::from_str_radix(inode, 10).unwrap(),
-            pathname: split.next().map(|x| x.to_string()),
+            pathname: Some(split.collect::<Vec<&str>>().join(" ")).filter(|x| !x.is_empty()),
         });
     }
     vec
@@ -107,6 +107,15 @@ fn test_parse_maps() {
             inode: 0,
             pathname: Some("[heap]".to_string()),
         },
+        MapRange {
+            range_start: 0x7f438053b000,
+            range_end: 0x7f438053f000,
+            offset: 0,
+            dev: "fd:01".to_string(),
+            flags: "r--p".to_string(),
+            inode: 59034409,
+            pathname: Some("/usr/lib/x86_64-linux-gnu/libgmodule-2.0.so.0.4200.6 (deleted)".to_string()),
+        }
     ];
     assert_eq!(vec, expected);
 
