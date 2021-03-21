@@ -23,8 +23,9 @@
 //! ```
 
 extern crate libc;
-extern crate failure;
 
+#[cfg(target_os = "macos")]
+extern crate failure;
 #[cfg(target_os = "macos")]
 extern crate mach;
 #[cfg(target_os = "macos")]
