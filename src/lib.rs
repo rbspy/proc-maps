@@ -38,9 +38,9 @@ pub mod mac_maps;
 #[cfg(target_os = "macos")]
 pub use mac_maps::{get_process_maps, MapRange, Pid};
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod linux_maps;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub use linux_maps::{get_process_maps, MapRange, Pid};
 
 #[cfg(windows)]
