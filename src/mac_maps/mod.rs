@@ -37,7 +37,7 @@ pub struct Symbol {
 fn parse_nm_output(output: &str) -> Vec<Symbol> {
     let mut vec = vec![];
     for line in output.split('\n') {
-        let mut split: Vec<&str> = line.split_whitespace().collect();
+        let split: Vec<&str> = line.split_whitespace().collect();
         let sym = if split.len() == 2 {
             Symbol {
                 value: None,
