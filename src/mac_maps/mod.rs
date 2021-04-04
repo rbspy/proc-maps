@@ -1,7 +1,7 @@
 use std;
 use std::io;
 use std::mem;
-use failure::Error;
+use anyhow::Error;
 use libc::{c_int, pid_t, strlen};
 use mach::kern_return::{KERN_SUCCESS, kern_return_t};
 use mach::port::{mach_port_name_t, mach_port_t, MACH_PORT_NULL};
@@ -9,7 +9,7 @@ use mach::vm_types::{mach_vm_address_t, mach_vm_size_t};
 use mach::message::mach_msg_type_number_t;
 use mach::vm_region::{vm_region_basic_info_data_t, vm_region_info_t,
                       vm_region_basic_info_data_64_t, VM_REGION_BASIC_INFO};
-use mach::types::vm_task_entry_t;
+use mach::mach_types::vm_task_entry_t;
 use libproc::libproc::proc_pid::regionfilename;
 use mach;
 
@@ -37,7 +37,7 @@ pub struct Symbol {
 fn parse_nm_output(output: &str) -> Vec<Symbol> {
     let mut vec = vec![];
     for line in output.split('\n') {
-        let mut split: Vec<&str> = line.split_whitespace().collect();
+        let split: Vec<&str> = line.split_whitespace().collect();
         let sym = if split.len() == 2 {
             Symbol {
                 value: None,
