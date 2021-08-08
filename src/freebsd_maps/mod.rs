@@ -1,5 +1,7 @@
 mod ptrace;
 mod protection;
+#[allow(warnings)]
+mod bindings;
 
 use libc::{pid_t, c_int, c_char};
 use std::iter::Iterator;
@@ -43,7 +45,7 @@ impl From<ptrace::vm_entry> for MapRange {
         Self {
             range_start: vm_entry.pve_start as usize,
             range_end: vm_entry.pve_end as usize,
-            protection: vm_entry.pve_prot,
+            protection: vm_entry.pve_prot as _,
             offset: vm_entry.pve_offset as usize,
             vnode: vm_entry.pve_fileid as usize,
             pathname: pathname,
@@ -83,7 +85,7 @@ impl Iterator for VmEntryIterator {
 
         let entry = Self::Item {
             pve_entry: current,
-            pve_path: &pve_path as *const _,
+            pve_path: &pve_path as *const _ as *mut _,
             pve_pathlen: pve_pathlen,
             ..Default::default()
         };
