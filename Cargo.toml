@@ -1,6 +1,6 @@
 [package]
 name = "proc-maps"
-version = "0.1.8"
+version = "0.1.9"
 authors = ["Julia Evans <julia@jvns.ca>", "Ben Frederickson <github@benfrederickson.com>"]
 description = "Helper crate for getting virtual memory maps from processes"
 license = "MIT"
