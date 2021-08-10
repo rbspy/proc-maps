@@ -11,11 +11,11 @@ Linux OSX and Windows operating systems.
 Example:
 
 ``` rust
-use proc_maps::{get_process_maps, MapRange};
+use proc_maps::get_process_maps;
 
 let maps = get_process_maps(pid)?;
 for map in maps {
-    println!("Filename {} Address {} Size {}", map.filename(), map.start(), map.size());
+    println!("Filename {:?} Address {} Size {}", map.filename(), map.start(), map.size());
 }
 
 ```
