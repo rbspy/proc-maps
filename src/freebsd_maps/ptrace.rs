@@ -3,22 +3,9 @@ use libc::{waitpid, WIFSTOPPED, PT_ATTACH, PT_DETACH, PT_VM_ENTRY};
 use std::{io, ptr};
 
 use super::Pid;
+use super::bindings::ptrace_vm_entry;
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct vm_entry {
-    pub pve_entry: c_int,
-    pub pve_timestamp: c_int,
-    pub pve_start: c_long,
-    pub pve_end: c_long,
-    pub pve_offset: c_long,
-    pub pve_prot: c_int,
-    pub pve_pathlen: c_int,
-    pub pve_fileid: c_long,
-    pub pve_fsid: uint32_t,
-    pub pve_path: *const c_char,
-}
-
+pub type vm_entry = ptrace_vm_entry;
 
 impl Default for vm_entry {
     fn default() -> Self {
@@ -32,7 +19,7 @@ impl Default for vm_entry {
             pve_pathlen: 0,
             pve_fileid: 0,
             pve_fsid: 0,
-            pve_path: ptr::null(),
+            pve_path: ptr::null_mut(),
         }
     }
 }
