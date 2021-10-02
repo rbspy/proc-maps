@@ -1,20 +1,24 @@
+use anyhow::Error;
+use libc::{c_int, pid_t, strlen};
+use libproc::libproc::proc_pid::regionfilename;
+use mach;
+use mach::kern_return::{kern_return_t, KERN_SUCCESS};
+use mach::mach_types::vm_task_entry_t;
+use mach::message::mach_msg_type_number_t;
+use mach::port::{mach_port_name_t, mach_port_t, MACH_PORT_NULL};
+use mach::vm_region::{
+    vm_region_basic_info_data_64_t, vm_region_basic_info_data_t, vm_region_info_t,
+    VM_REGION_BASIC_INFO,
+};
+use mach::vm_types::{mach_vm_address_t, mach_vm_size_t};
 use std;
 use std::io;
 use std::mem;
-use anyhow::Error;
-use libc::{c_int, pid_t, strlen};
-use mach::kern_return::{KERN_SUCCESS, kern_return_t};
-use mach::port::{mach_port_name_t, mach_port_t, MACH_PORT_NULL};
-use mach::vm_types::{mach_vm_address_t, mach_vm_size_t};
-use mach::message::mach_msg_type_number_t;
-use mach::vm_region::{vm_region_basic_info_data_t, vm_region_info_t,
-                      vm_region_basic_info_data_64_t, VM_REGION_BASIC_INFO};
-use mach::mach_types::vm_task_entry_t;
-use libproc::libproc::proc_pid::regionfilename;
-use mach;
 
 mod dyld_bindings;
-use self::dyld_bindings::{dyld_all_image_infos, dyld_image_info, mach_header_64, segment_command_64};
+use self::dyld_bindings::{
+    dyld_all_image_infos, dyld_image_info, mach_header_64, segment_command_64,
+};
 
 pub type Pid = pid_t;
 
@@ -65,9 +69,15 @@ pub fn get_symbols(filename: &str) -> Result<Vec<Symbol>, Error> {
 }
 
 impl MapRange {
-    pub fn size(&self) -> usize { self.size as usize }
-    pub fn start(&self) -> usize { self.start as usize }
-    pub fn filename(&self) -> &Option<String> { &self.filename }
+    pub fn size(&self) -> usize {
+        self.size as usize
+    }
+    pub fn start(&self) -> usize {
+        self.start as usize
+    }
+    pub fn filename(&self) -> &Option<String> {
+        &self.filename
+    }
 
     pub fn is_read(&self) -> bool {
         self.info.protection & mach::vm_prot::VM_PROT_READ != 0
@@ -134,7 +144,13 @@ fn mach_vm_region(
         Ok(x) => Some(x),
         _ => None,
     };
-    Some(MapRange{size, info, start: address, count, filename})
+    Some(MapRange {
+        size,
+        info,
+        start: address,
+        count,
+        filename,
+    })
 }
 
 pub fn task_for_pid(pid: Pid) -> io::Result<mach_port_name_t> {
@@ -159,7 +175,7 @@ pub struct DyldInfo {
     pub filename: String,
     pub address: usize,
     pub file_mod_date: usize,
-    pub segment: segment_command_64
+    pub segment: segment_command_64,
 }
 
 /// Returns basic information on modules loaded up by dyld. This lets
@@ -174,22 +190,30 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
     // this is a good start though
     // hmm
     use mach::task::task_info;
-    use mach::task_info::{TASK_DYLD_INFO, task_info_t};
+    use mach::task_info::{task_info_t, TASK_DYLD_INFO};
 
     let mut vec = Vec::new();
     let task = task_for_pid(pid)?;
 
     // Note: this seems to require osx MAC_OS_X_VERSION_10_6 or greater
     // https://chromium.googlesource.com/breakpad/breakpad/+/master/src/client/mac/handler/dynamic_images.cc#388
-    let mut dyld_info = task_dyld_info{all_image_info_addr: 0, all_image_info_size: 0, all_image_info_format: 0};
+    let mut dyld_info = task_dyld_info {
+        all_image_info_addr: 0,
+        all_image_info_size: 0,
+        all_image_info_format: 0,
+    };
 
     // TASK_DYLD_INFO_COUNT is #define'd to be 5 in /usr/include/mach/task_info.h
     // ... doesn't seem to be included in the mach crate =(
     let mut count: mach_msg_type_number_t = 5;
     unsafe {
-        if task_info(task, TASK_DYLD_INFO,
-                    &mut dyld_info as *mut task_dyld_info as task_info_t,
-                    &mut count) != KERN_SUCCESS {
+        if task_info(
+            task,
+            TASK_DYLD_INFO,
+            &mut dyld_info as *mut task_dyld_info as task_info_t,
+            &mut count,
+        ) != KERN_SUCCESS
+        {
             return Err(io::Error::last_os_error());
         }
     }
@@ -201,11 +225,13 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
     let result = unsafe {
         // While we could use the read_process_memory crate for this, this adds a dependency
         // for something that is pretty trivial
-        vm_read_overwrite(task,
+        vm_read_overwrite(
+            task,
             dyld_info.all_image_info_addr,
             read_len,
             (&mut image_infos) as *mut dyld_all_image_infos as mach_vm_address_t,
-            &mut read_len)
+            &mut read_len,
+        )
     };
     if result != KERN_SUCCESS {
         return Err(io::Error::last_os_error());
@@ -214,13 +240,15 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
     // copy the infoArray element of dyld_all_image_infos ovber
     let mut modules = vec![dyld_image_info::default(); image_infos.infoArrayCount as usize];
     let mut read_len = (std::mem::size_of::<dyld_image_info>()
-                        * image_infos.infoArrayCount as usize) as mach_vm_size_t;
+        * image_infos.infoArrayCount as usize) as mach_vm_size_t;
     let result = unsafe {
-        vm_read_overwrite(task,
+        vm_read_overwrite(
+            task,
             image_infos.infoArray as mach_vm_address_t,
             read_len,
             modules.as_mut_ptr() as mach_vm_address_t,
-            &mut read_len)
+            &mut read_len,
+        )
     };
     if result != KERN_SUCCESS {
         return Err(io::Error::last_os_error());
@@ -230,18 +258,20 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         let mut read_len = 512 as mach_vm_size_t;
         let mut image_filename = [0_i8; 512];
         let result = unsafe {
-            vm_read_overwrite(task,
+            vm_read_overwrite(
+                task,
                 module.imageFilePath as mach_vm_address_t,
                 read_len,
                 image_filename.as_mut_ptr() as mach_vm_address_t,
-                &mut read_len)
+                &mut read_len,
+            )
         };
         if result != KERN_SUCCESS {
             return Err(io::Error::last_os_error());
         }
 
         let ptr = image_filename.as_ptr();
-        let slice = unsafe { std::slice::from_raw_parts(ptr as *mut u8, strlen(ptr))};
+        let slice = unsafe { std::slice::from_raw_parts(ptr as *mut u8, strlen(ptr)) };
         let filename = std::str::from_utf8(slice).unwrap().to_owned();
 
         // read in the mach header
@@ -250,10 +280,13 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         let result = unsafe {
             // While we could use the read_process_memory crate for this, this adds a dependency
             // for something that is pretty trivial
-            vm_read_overwrite(task, module.imageLoadAddress as u64,
+            vm_read_overwrite(
+                task,
+                module.imageLoadAddress as u64,
                 read_len,
                 (&mut header) as *mut mach_header_64 as mach_vm_address_t,
-                &mut read_len)
+                &mut read_len,
+            )
         };
         if result != KERN_SUCCESS {
             return Err(io::Error::last_os_error());
@@ -262,11 +295,14 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         let mut commands_buffer = vec![0_i8; header.sizeofcmds as usize];
         let mut read_len = mach_vm_size_t::from(header.sizeofcmds);
         let result = unsafe {
-            vm_read_overwrite(task,
-                (module.imageLoadAddress as usize + std::mem::size_of_val(&header)) as mach_vm_size_t,
+            vm_read_overwrite(
+                task,
+                (module.imageLoadAddress as usize + std::mem::size_of_val(&header))
+                    as mach_vm_size_t,
                 read_len,
                 commands_buffer.as_mut_ptr() as mach_vm_address_t,
-                &mut read_len)
+                &mut read_len,
+            )
         };
         if result != KERN_SUCCESS {
             return Err(io::Error::last_os_error());
@@ -277,10 +313,11 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         let mut slide: u64 = 0;
         for _ in 0..header.ncmds {
             unsafe {
-                let command = *(commands_buffer.as_ptr().offset(offset as isize) as * const segment_command_64);
+                let command = *(commands_buffer.as_ptr().offset(offset as isize)
+                    as *const segment_command_64);
                 // LC_SEGMENT_64 = 0x19 TODO
                 // find the __TEXT segment and compute the slide if appropiate
-                if command.cmd == 0x19 && command.segname[0..7] ==  [95, 95, 84, 69, 88, 84, 0] {
+                if command.cmd == 0x19 && command.segname[0..7] == [95, 95, 84, 69, 88, 84, 0] {
                     slide = module.imageLoadAddress as u64 - command.vmaddr;
                     break;
                 }
@@ -291,13 +328,16 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         let mut offset: u32 = 0;
         for _ in 0..header.ncmds {
             unsafe {
-                let mut command = *(commands_buffer.as_ptr().offset(offset as isize) as * const segment_command_64);
+                let mut command = *(commands_buffer.as_ptr().offset(offset as isize)
+                    as *const segment_command_64);
                 if command.cmd == 0x19 {
                     command.vmaddr += slide;
-                    vec.push(DyldInfo{filename: filename.clone(),
-                                    address: module.imageLoadAddress as usize,
-                                    file_mod_date: module.imageFileModDate,
-                                    segment: command});
+                    vec.push(DyldInfo {
+                        filename: filename.clone(),
+                        address: module.imageLoadAddress as usize,
+                        file_mod_date: module.imageFileModDate,
+                        segment: command,
+                    });
                 }
                 offset += command.cmdsize;
             }
@@ -307,11 +347,13 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
 }
 
 extern "C" {
-    fn vm_read_overwrite(target_task: mach_port_t,
-                         address: mach_vm_address_t,
-                         size: mach_vm_size_t,
-                         data: mach_vm_address_t,
-                         out_size: *mut mach_vm_size_t) -> kern_return_t;
+    fn vm_read_overwrite(
+        target_task: mach_port_t,
+        address: mach_vm_address_t,
+        size: mach_vm_size_t,
+        data: mach_vm_address_t,
+        out_size: *mut mach_vm_size_t,
+    ) -> kern_return_t;
 }
 
 // bindgen seemed to put all the members for this struct as a single opaque blob:

@@ -14,9 +14,8 @@ fn main() {
             .generate()
             .expect("Unable to generate bindings");
 
-
-     bindings
-        .write_to_file("src/freebsd_maps/bindings.rs")
-        .expect("Couldn't write bindings!");
+        bindings
+            .write_to_file("src/freebsd_maps/bindings.rs")
+            .expect("Couldn't write bindings!");
     }
 }

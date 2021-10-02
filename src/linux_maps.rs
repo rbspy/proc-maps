@@ -21,17 +21,29 @@ pub struct MapRange {
 
 impl MapRange {
     /// Returns the size of this MapRange in bytes
-    pub fn size(&self) -> usize { self.range_end - self.range_start }
+    pub fn size(&self) -> usize {
+        self.range_end - self.range_start
+    }
     /// Returns the address this MapRange starts at
-    pub fn start(&self) -> usize { self.range_start }
+    pub fn start(&self) -> usize {
+        self.range_start
+    }
     /// Returns the filename of the loaded module
-    pub fn filename(&self) -> &Option<String> { &self.pathname }
+    pub fn filename(&self) -> &Option<String> {
+        &self.pathname
+    }
     /// Returns whether this range contains executable code
-    pub fn is_exec(&self) -> bool { &self.flags[2..3] == "x" }
+    pub fn is_exec(&self) -> bool {
+        &self.flags[2..3] == "x"
+    }
     /// Returns whether this range contains writeable memory
-    pub fn is_write(&self) -> bool { &self.flags[1..2] == "w" }
+    pub fn is_write(&self) -> bool {
+        &self.flags[1..2] == "w"
+    }
     /// Returns whether this range contains readable memory
-    pub fn is_read(&self) -> bool { &self.flags[0..1] == "r" }
+    pub fn is_read(&self) -> bool {
+        &self.flags[0..1] == "r"
+    }
 }
 
 /// Gets a Vec of [`MapRange`](linux_maps/struct.MapRange.html) structs for
@@ -114,8 +126,10 @@ fn test_parse_maps() {
             dev: "fd:01".to_string(),
             flags: "r--p".to_string(),
             inode: 59034409,
-            pathname: Some("/usr/lib/x86_64-linux-gnu/libgmodule-2.0.so.0.4200.6 (deleted)".to_string()),
-        }
+            pathname: Some(
+                "/usr/lib/x86_64-linux-gnu/libgmodule-2.0.so.0.4200.6 (deleted)".to_string(),
+            ),
+        },
     ];
     assert_eq!(vec, expected);
 

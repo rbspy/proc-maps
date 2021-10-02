@@ -1,12 +1,12 @@
-mod ptrace;
-mod protection;
 #[allow(warnings)]
 mod bindings;
+mod protection;
+mod ptrace;
 
-use libc::{pid_t, c_int, c_char};
-use std::iter::Iterator;
-use std::ffi::CStr;
+use libc::{c_char, c_int, pid_t};
 use std::convert::From;
+use std::ffi::CStr;
+use std::iter::Iterator;
 
 pub type Pid = pid_t;
 
@@ -21,9 +21,15 @@ pub struct MapRange {
 }
 
 impl MapRange {
-    pub fn size(&self) -> usize { self.range_end - self.range_start }
-    pub fn start(&self) -> usize { self.range_start }
-    pub fn filename(&self) -> &Option<String> { &self.pathname }
+    pub fn size(&self) -> usize {
+        self.range_end - self.range_start
+    }
+    pub fn start(&self) -> usize {
+        self.range_start
+    }
+    pub fn filename(&self) -> &Option<String> {
+        &self.pathname
+    }
 
     pub fn is_read(&self) -> bool {
         self.protection & protection::VM_PROT_READ != 0
@@ -62,7 +68,6 @@ fn test_map_from_invoked_binary_present() -> () {
         .spawn()
         .expect("failed to execute /bin/cat");
 
-
     let maps = get_process_maps(child.id() as Pid).unwrap();
 
     child.kill();
@@ -90,9 +95,7 @@ fn test_write_xor_execute_policy() -> () {
 
     assert!(maps.len() > 0, "No process maps were found");
 
-    let write_and_exec_regions = maps
-        .iter()
-        .any(|x| x.is_write() && x.is_exec());
+    let write_and_exec_regions = maps.iter().any(|x| x.is_write() && x.is_exec());
 
     assert!(!write_and_exec_regions, "W^X violation!");
 }

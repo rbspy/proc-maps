@@ -27,9 +27,9 @@ extern crate libc;
 #[cfg(target_os = "macos")]
 extern crate anyhow;
 #[cfg(target_os = "macos")]
-extern crate mach;
-#[cfg(target_os = "macos")]
 extern crate libproc;
+#[cfg(target_os = "macos")]
+extern crate mach;
 #[cfg(windows)]
 extern crate winapi;
 
