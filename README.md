@@ -6,7 +6,7 @@ proc-maps
 [![docs.rs](https://docs.rs/proc-maps/badge.svg)](https://docs.rs/proc-maps)
 
 This crate supports reading virtual memory maps from another process - and supports
-Linux, OSX, Windows, and FreeBSD operating systems.
+Linux, macOS, Windows, and FreeBSD operating systems.
 
 Example:
 

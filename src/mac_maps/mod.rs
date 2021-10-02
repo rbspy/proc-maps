@@ -195,7 +195,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
     let mut vec = Vec::new();
     let task = task_for_pid(pid)?;
 
-    // Note: this seems to require osx MAC_OS_X_VERSION_10_6 or greater
+    // Note: this seems to require macOS MAC_OS_X_VERSION_10_6 or greater
     // https://chromium.googlesource.com/breakpad/breakpad/+/master/src/client/mac/handler/dynamic_images.cc#388
     let mut dyld_info = task_dyld_info {
         all_image_info_addr: 0,
