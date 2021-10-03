@@ -1,18 +1,16 @@
-use libc::{c_char, c_int, c_long, uint32_t};
+use libc::{c_char, c_int};
 use libc::{waitpid, PT_ATTACH, PT_DETACH, PT_VM_ENTRY, WIFSTOPPED};
 use std::convert::From;
 use std::ffi::CStr;
 use std::iter::Iterator;
 use std::{io, ptr};
 
-use super::bindings::ptrace_vm_entry;
+use super::bindings::{caddr_t, ptrace_vm_entry};
 use super::Pid;
-
-type vm_entry = ptrace_vm_entry;
 
 const FILE_NAME_BUFFER_LENGTH: usize = 4096;
 
-impl Default for vm_entry {
+impl Default for ptrace_vm_entry {
     fn default() -> Self {
         Self {
             pve_entry: 0,
@@ -43,8 +41,8 @@ pub struct VmEntry {
     pub pve_path: Option<String>,
 }
 
-impl From<vm_entry> for VmEntry {
-    fn from(vm_entry: vm_entry) -> Self {
+impl From<ptrace_vm_entry> for VmEntry {
+    fn from(vm_entry: ptrace_vm_entry) -> Self {
         Self {
             pve_entry: vm_entry.pve_entry,
             pve_timestamp: vm_entry.pve_timestamp,
@@ -93,7 +91,9 @@ impl VmEntryIterator {
 
 impl Drop for VmEntryIterator {
     fn drop(&mut self) {
-        detach(self.pid);
+        if let Err(e) = detach(self.pid) {
+            eprintln!("failed to ptrace detach: {:?}", e);
+        }
     }
 }
 
@@ -106,7 +106,7 @@ impl Iterator for VmEntryIterator {
         let pve_pathlen = 4096;
         let pve_path: [c_char; FILE_NAME_BUFFER_LENGTH] = [0; FILE_NAME_BUFFER_LENGTH];
 
-        let entry = vm_entry {
+        let entry = ptrace_vm_entry {
             pve_entry: current,
             pve_path: &pve_path as *const _ as *mut _,
             pve_pathlen: pve_pathlen,
@@ -143,12 +143,12 @@ fn string_from_cstr_ptr(pointer: *const c_char) -> Option<String> {
 }
 
 extern "C" {
-    fn ptrace(request: c_int, pid: Pid, vm_entry: *const vm_entry, data: c_int) -> c_int;
+    fn ptrace(request: c_int, pid: Pid, vm_entry: caddr_t, data: c_int) -> c_int;
 }
 
 /// Attach to a process `pid` and wait for the process to be stopped.
 pub fn attach(pid: Pid) -> io::Result<()> {
-    let attach_status = unsafe { ptrace(PT_ATTACH, pid, ptr::null(), 0) };
+    let attach_status = unsafe { ptrace(PT_ATTACH, pid, ptr::null_mut(), 0) };
 
     if attach_status == -1 {
         return Err(io::Error::last_os_error());
@@ -170,7 +170,7 @@ pub fn attach(pid: Pid) -> io::Result<()> {
 
 /// Detach from the process `pid`.
 pub fn detach(pid: Pid) -> io::Result<()> {
-    let detach_status = unsafe { ptrace(PT_DETACH, pid, ptr::null(), 0) };
+    let detach_status = unsafe { ptrace(PT_DETACH, pid, ptr::null_mut(), 0) };
 
     if detach_status == -1 {
         Err(io::Error::last_os_error())
@@ -180,8 +180,8 @@ pub fn detach(pid: Pid) -> io::Result<()> {
 }
 
 /// Read virtual memory entry
-pub fn read_vm_entry(pid: Pid, vm_entry: vm_entry) -> io::Result<vm_entry> {
-    let result = unsafe { ptrace(PT_VM_ENTRY, pid, &vm_entry as *const _, 0) };
+pub fn read_vm_entry(pid: Pid, vm_entry: ptrace_vm_entry) -> io::Result<ptrace_vm_entry> {
+    let result = unsafe { ptrace(PT_VM_ENTRY, pid, &vm_entry as *const _ as *mut i8, 0) };
 
     if result == -1 {
         Err(io::Error::last_os_error())

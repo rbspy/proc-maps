@@ -3,9 +3,8 @@ mod bindings;
 mod protection;
 mod ptrace;
 
-use libc::{c_char, c_int, pid_t};
+use libc::{c_int, pid_t};
 use std::convert::From;
-use std::ffi::CStr;
 use std::iter::Iterator;
 
 pub type Pid = pid_t;
@@ -70,7 +69,7 @@ fn test_map_from_invoked_binary_present() -> () {
 
     let maps = get_process_maps(child.id() as Pid).unwrap();
 
-    child.kill();
+    child.kill().expect("failed to kill test process");
 
     let maybe_cat_region = maps
         .iter()
@@ -91,7 +90,7 @@ fn test_write_xor_execute_policy() -> () {
 
     let maps = get_process_maps(child.id() as Pid).unwrap();
 
-    child.kill();
+    child.kill().expect("failed to kill test process");
 
     assert!(maps.len() > 0, "No process maps were found");
 
