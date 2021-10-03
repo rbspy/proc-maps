@@ -1,8 +1,6 @@
 #[cfg(target_os = "freebsd")]
 extern crate bindgen;
 
-use std::env;
-
 fn main() {
     #[cfg(target_os = "freebsd")]
     {
