@@ -1,7 +1,6 @@
 proc-maps
 =========
-[![Build Status](https://travis-ci.org/rbspy/proc-maps.svg?branch=master)](https://travis-ci.org/rbspy/proc-maps)
-[![Windows Build status](https://ci.appveyor.com/api/projects/status/ga754jgewu4u1v6m?svg=true)](https://ci.appveyor.com/project/benfred/proc-maps-wugxn)
+[![Build Status](https://github.com/acj/proc-maps/actions/workflows/ci.yml/badge.svg)](https://github.com/rbspy/proc-maps/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/proc-maps.svg)](https://crates.io/crates/proc-maps)
 [![docs.rs](https://docs.rs/proc-maps/badge.svg)](https://docs.rs/proc-maps)
 
