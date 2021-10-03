@@ -1,0 +1,107 @@
+name: CI
+on:
+  pull_request:
+    branches: [ master ]
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  format:
+    name: Check code formatting
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        profile: minimal
+        components: rustfmt
+    - name: Run cargo fmt
+      run: |
+        cargo fmt --all -- --check
+
+  build:
+    name: Build and test
+    env:
+      CARGO: cargo
+      TARGET_FLAGS: --target ${{ matrix.target }}
+      RUST_BACKTRACE: 1
+    timeout-minutes: 30
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        build:
+        - linux-x86_64
+        - macos
+        - windows
+        include:
+        - build: linux-x86_64
+          os: ubuntu-20.04
+          run-tests: 'true'
+          target: x86_64-unknown-linux-gnu
+        - build: macos
+          os: macos-10.15
+          run-tests: 'true'
+          target: x86_64-apple-darwin
+        - build: windows
+          os: windows-2019
+          run-tests: 'true'
+          target: x86_64-pc-windows-msvc
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+    - name: Install Rust toolchain target
+      run: |
+        rustup target add ${{ matrix.target }}
+    - name: Cargo Cache
+      uses: actions/cache@v2.1.4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.target }}-cargo-
+    - name: Build
+      run: ${{ env.CARGO }} build --release --locked --verbose --workspace --all-targets ${{ env.TARGET_FLAGS }}
+    - name: Run tests
+      timeout-minutes: 5
+      run: ${{ env.CARGO }} test --release --verbose  ${{ env.TARGET_FLAGS }}
+      if: runner.os != 'macOS' && matrix.run-tests == 'true'
+    - name: Run tests
+      timeout-minutes: 5
+      run: sudo ${{ env.CARGO }} test --release --verbose  ${{ env.TARGET_FLAGS }}
+      if: runner.os == 'macOS' && matrix.run-tests == 'true'
+    
+  build-freebsd:
+    runs-on: macos-10.15
+    name: Build and test (freebsd-x86_64)
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build and test
+      uses: vmactions/freebsd-vm@v0.1.5
+      timeout-minutes: 30
+      with:
+        mem: 4096
+        usesh: true
+        prepare: pkg install -y curl llvm
+        run: |
+          set -euo pipefail
+
+          curl https://sh.rustup.rs -sSf --output rustup.sh
+          sh rustup.sh -y --default-toolchain stable
+          . $HOME/.cargo/env
+
+          cargo build --release --verbose --workspace --all-targets
+          cargo test --release --verbose

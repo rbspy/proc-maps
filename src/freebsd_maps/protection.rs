@@ -1,6 +1,5 @@
 /// These values are not exposed via libc, yet.
 /// Defined in FreeBSD source: /sys/vm/vm.h
-
 use libc::int32_t;
 
 pub const VM_PROT_READ: int32_t = 0x01;

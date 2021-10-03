@@ -3,11 +3,11 @@
 //! This crate provides a function—[`get_process_maps`](linux_maps/fn.get_process_maps.html)
 //! that returns a Vec of [`MapRange`](linux_maps/struct.MapRange.html) structs.
 //!
-//! This code works on Linux, OSX and Windows. Each operating system has different
+//! This code works on Linux, macOS and Windows. Each operating system has different
 //! implementations, but the functions and struct's for each OS share the same
 //! interface - so this can be used generically across operating systems.
 //!
-//! Note: on OSX this requires root access, and even with root will still not
+//! Note: on macOS this requires root access, and even with root will still not
 //! work on processes that have System Integrity Protection enabled
 //! (anything in /usr/bin for example).
 //!
@@ -27,9 +27,9 @@ extern crate libc;
 #[cfg(target_os = "macos")]
 extern crate anyhow;
 #[cfg(target_os = "macos")]
-extern crate mach;
-#[cfg(target_os = "macos")]
 extern crate libproc;
+#[cfg(target_os = "macos")]
+extern crate mach;
 #[cfg(windows)]
 extern crate winapi;
 
@@ -59,7 +59,7 @@ fn map_contain_addr(map: &MapRange, addr: usize) -> bool {
 }
 
 /// Returns whether or not any MapRange contains the given address
-/// Note: this will only work correctly on OSX and Linux.
+/// Note: this will only work correctly on macOS and Linux.
 pub fn maps_contain_addr(addr: usize, maps: &[MapRange]) -> bool {
     maps.iter().any(|map| map_contain_addr(map, addr))
 }

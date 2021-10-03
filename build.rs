@@ -1,8 +1,6 @@
 #[cfg(target_os = "freebsd")]
 extern crate bindgen;
 
-use std::env;
-
 fn main() {
     #[cfg(target_os = "freebsd")]
     {
@@ -14,9 +12,8 @@ fn main() {
             .generate()
             .expect("Unable to generate bindings");
 
-
-     bindings
-        .write_to_file("src/freebsd_maps/bindings.rs")
-        .expect("Couldn't write bindings!");
+        bindings
+            .write_to_file("src/freebsd_maps/bindings.rs")
+            .expect("Couldn't write bindings!");
     }
 }

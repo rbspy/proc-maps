@@ -5,8 +5,8 @@ use std::ffi::CStr;
 use std::iter::Iterator;
 use std::{io, ptr};
 
-use super::Pid;
 use super::bindings::ptrace_vm_entry;
+use super::Pid;
 
 type vm_entry = ptrace_vm_entry;
 
@@ -143,20 +143,15 @@ fn string_from_cstr_ptr(pointer: *const c_char) -> Option<String> {
 }
 
 extern "C" {
-    fn ptrace(request: c_int,
-              pid: Pid,
-              vm_entry: *const vm_entry,
-              data: c_int) -> c_int;
+    fn ptrace(request: c_int, pid: Pid, vm_entry: *const vm_entry, data: c_int) -> c_int;
 }
 
 /// Attach to a process `pid` and wait for the process to be stopped.
 pub fn attach(pid: Pid) -> io::Result<()> {
-    let attach_status = unsafe {
-        ptrace(PT_ATTACH, pid, ptr::null(), 0)
-    };
+    let attach_status = unsafe { ptrace(PT_ATTACH, pid, ptr::null(), 0) };
 
     if attach_status == -1 {
-        return Err(io::Error::last_os_error())
+        return Err(io::Error::last_os_error());
     }
 
     let mut wait_status = 0;
@@ -175,9 +170,7 @@ pub fn attach(pid: Pid) -> io::Result<()> {
 
 /// Detach from the process `pid`.
 pub fn detach(pid: Pid) -> io::Result<()> {
-    let detach_status = unsafe {
-        ptrace(PT_DETACH, pid, ptr::null(), 0)
-    };
+    let detach_status = unsafe { ptrace(PT_DETACH, pid, ptr::null(), 0) };
 
     if detach_status == -1 {
         Err(io::Error::last_os_error())
@@ -188,9 +181,7 @@ pub fn detach(pid: Pid) -> io::Result<()> {
 
 /// Read virtual memory entry
 pub fn read_vm_entry(pid: Pid, vm_entry: vm_entry) -> io::Result<vm_entry> {
-    let result = unsafe {
-        ptrace(PT_VM_ENTRY, pid, &vm_entry as *const _, 0)
-    };
+    let result = unsafe { ptrace(PT_VM_ENTRY, pid, &vm_entry as *const _, 0) };
 
     if result == -1 {
         Err(io::Error::last_os_error())
