@@ -88,6 +88,8 @@ fn test_write_xor_execute_policy() -> () {
 
     child.kill();
 
+    assert!(maps.len() > 0, "No process maps were found");
+
     let write_and_exec_regions = maps
         .iter()
         .any(|x| x.is_write() && x.is_exec());
