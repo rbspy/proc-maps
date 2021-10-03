@@ -24,6 +24,54 @@ impl Default for vm_entry {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct VmEntry {
+    pub pve_entry: i32,
+    pub pve_timestamp: i32,
+    pub pve_start: u64,
+    pub pve_end: u64,
+    pub pve_offset: u64,
+    pub pve_prot: u32,
+    pub pve_pathlen: u32,
+    pub pve_fileid: i64,
+    pub pve_fsid: u32,
+    pub pve_path: Option<String>,
+}
+
+impl From<vm_entry> for VmEntry {
+    fn from(vm_entry: vm_entry) -> Self {
+        Self {
+            pve_entry: vm_entry.pve_entry,
+            pve_timestamp: vm_entry.pve_timestamp,
+            pve_start: vm_entry.pve_start,
+            pve_end: vm_entry.pve_end,
+            pve_offset: vm_entry.pve_offset,
+            pve_prot: vm_entry.pve_prot,
+            pve_pathlen: vm_entry.pve_pathlen,
+            pve_fileid: vm_entry.pve_fileid,
+            pve_fsid: vm_entry.pve_fsid,
+            pve_path: string_from_cstr_ptr(vm_entry.pve_path),
+        }
+    }
+}
+
+impl Default for VmEntry {
+    fn default() -> Self {
+        Self {
+            pve_entry: 0,
+            pve_timestamp: 0,
+            pve_start: 0,
+            pve_end: 0,
+            pve_offset: 0,
+            pve_prot: 0,
+            pve_pathlen: 0,
+            pve_fileid: 0,
+            pve_fsid: 0,
+            pve_path: None,
+        }
+    }
+}
+
 extern "C" {
     fn ptrace(request: c_int,
               pid: Pid,
