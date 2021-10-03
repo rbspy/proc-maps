@@ -1,11 +1,16 @@
-use libc::{c_int, c_long, c_char, uint32_t};
-use libc::{waitpid, WIFSTOPPED, PT_ATTACH, PT_DETACH, PT_VM_ENTRY};
+use libc::{c_char, c_int, c_long, uint32_t};
+use libc::{waitpid, PT_ATTACH, PT_DETACH, PT_VM_ENTRY, WIFSTOPPED};
+use std::convert::From;
+use std::ffi::CStr;
+use std::iter::Iterator;
 use std::{io, ptr};
 
 use super::Pid;
 use super::bindings::ptrace_vm_entry;
 
-pub type vm_entry = ptrace_vm_entry;
+type vm_entry = ptrace_vm_entry;
+
+const FILE_NAME_BUFFER_LENGTH: usize = 4096;
 
 impl Default for vm_entry {
     fn default() -> Self {
@@ -68,6 +73,71 @@ impl Default for VmEntry {
             pve_fileid: 0,
             pve_fsid: 0,
             pve_path: None,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct VmEntryIterator {
+    current: c_int,
+    pid: Pid,
+}
+
+impl VmEntryIterator {
+    pub fn new(pid: Pid) -> std::io::Result<Self> {
+        attach(pid)?;
+
+        Ok(Self { current: 0, pid })
+    }
+}
+
+impl Drop for VmEntryIterator {
+    fn drop(&mut self) {
+        detach(self.pid);
+    }
+}
+
+impl Iterator for VmEntryIterator {
+    type Item = VmEntry;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let Self { current, pid } = *self;
+        // If the region was mapped from a file, `pve_path` contains filename.
+        let pve_pathlen = 4096;
+        let pve_path: [c_char; FILE_NAME_BUFFER_LENGTH] = [0; FILE_NAME_BUFFER_LENGTH];
+
+        let entry = vm_entry {
+            pve_entry: current,
+            pve_path: &pve_path as *const _ as *mut _,
+            pve_pathlen: pve_pathlen,
+            ..Default::default()
+        };
+
+        let result = read_vm_entry(pid, entry);
+
+        match result {
+            Ok(entry) => {
+                self.current = entry.pve_entry;
+
+                Some(entry.into())
+            }
+            _ => None,
+        }
+    }
+}
+
+fn string_from_cstr_ptr(pointer: *const c_char) -> Option<String> {
+    if pointer.is_null() {
+        None
+    } else {
+        unsafe {
+            let result = CStr::from_ptr(pointer).to_string_lossy().into_owned();
+
+            if result.len() > 0 {
+                Some(result)
+            } else {
+                None
+            }
         }
     }
 }
