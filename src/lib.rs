@@ -3,8 +3,8 @@
 //! This crate provides a function—[`get_process_maps`](linux_maps/fn.get_process_maps.html)
 //! that returns a Vec of [`MapRange`](linux_maps/struct.MapRange.html) structs.
 //!
-//! This code works on Linux, macOS and Windows. Each operating system has different
-//! implementations, but the functions and struct's for each OS share the same
+//! This code works on Linux, macOS, and Windows. Each operating system has a different
+//! implementation, but the functions and structs for all OSes share the same
 //! interface - so this can be used generically across operating systems.
 //!
 //! Note: on macOS this requires root access, and even with root will still not
