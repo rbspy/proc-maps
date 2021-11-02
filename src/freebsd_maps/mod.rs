@@ -6,6 +6,7 @@ mod ptrace;
 use libc::{c_int, pid_t};
 use std::convert::From;
 use std::iter::Iterator;
+use std::path::{Path, PathBuf};
 
 pub type Pid = pid_t;
 
@@ -16,7 +17,7 @@ pub struct MapRange {
     protection: c_int,
     offset: usize,
     vnode: usize,
-    pathname: Option<String>,
+    pathname: Option<PathBuf>,
 }
 
 impl MapRange {
@@ -26,8 +27,8 @@ impl MapRange {
     pub fn start(&self) -> usize {
         self.range_start
     }
-    pub fn filename(&self) -> &Option<String> {
-        &self.pathname
+    pub fn filename(&self) -> Option<&Path> {
+        self.pathname.as_deref()
     }
 
     pub fn is_read(&self) -> bool {
@@ -73,7 +74,7 @@ fn test_map_from_invoked_binary_present() -> () {
 
     let maybe_cat_region = maps
         .iter()
-        .find(|x| x.filename() == &Some(String::from("/bin/cat")));
+        .find(|map| map.filename() == Some(&PathBuf::from("/bin/cat")));
 
     assert!(
         maybe_cat_region.is_some(),

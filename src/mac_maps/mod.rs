@@ -14,6 +14,7 @@ use mach::vm_types::{mach_vm_address_t, mach_vm_size_t};
 use std;
 use std::io;
 use std::mem;
+use std::path::{Path, PathBuf};
 
 mod dyld_bindings;
 use self::dyld_bindings::{
@@ -28,7 +29,7 @@ pub struct MapRange {
     info: vm_region_basic_info_data_t,
     start: mach_vm_address_t,
     count: mach_msg_type_number_t,
-    filename: Option<String>,
+    filename: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,8 +76,8 @@ impl MapRange {
     pub fn start(&self) -> usize {
         self.start as usize
     }
-    pub fn filename(&self) -> &Option<String> {
-        &self.filename
+    pub fn filename(&self) -> Option<&Path> {
+        self.filename.as_deref()
     }
 
     pub fn is_read(&self) -> bool {
@@ -141,7 +142,7 @@ fn mach_vm_region(
         return None;
     }
     let filename = match regionfilename(pid, address) {
-        Ok(x) => Some(x),
+        Ok(s) => Some(PathBuf::from(s.as_str())),
         _ => None,
     };
     Some(MapRange {
@@ -172,7 +173,7 @@ pub fn task_for_pid(pid: Pid) -> io::Result<mach_port_name_t> {
 
 #[derive(Debug, Clone)]
 pub struct DyldInfo {
-    pub filename: String,
+    pub filename: PathBuf,
     pub address: usize,
     pub file_mod_date: usize,
     pub segment: segment_command_64,
@@ -333,7 +334,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
                 if command.cmd == 0x19 {
                     command.vmaddr += slide;
                     vec.push(DyldInfo {
-                        filename: filename.clone(),
+                        filename: PathBuf::from(filename.clone()),
                         address: module.imageLoadAddress as usize,
                         file_mod_date: module.imageFileModDate,
                         segment: command,

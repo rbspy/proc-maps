@@ -1,8 +1,8 @@
-use libc::wcslen;
 use std;
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 
 use winapi::shared::minwindef::{DWORD, FALSE};
@@ -21,7 +21,7 @@ pub type Pid = u32;
 pub struct MapRange {
     base_addr: usize,
     base_size: usize,
-    pathname: Option<String>,
+    pathname: Option<PathBuf>,
 }
 
 impl MapRange {
@@ -31,8 +31,8 @@ impl MapRange {
     pub fn start(&self) -> usize {
         self.base_addr
     }
-    pub fn filename(&self) -> &Option<String> {
-        &self.pathname
+    pub fn filename(&self) -> Option<&Path> {
+        self.pathname.as_deref()
     }
     pub fn is_exec(&self) -> bool {
         true
@@ -68,7 +68,7 @@ pub fn get_process_maps(pid: Pid) -> io::Result<Vec<MapRange>> {
             vec.push(MapRange {
                 base_addr: module.modBaseAddr as usize,
                 base_size: module.modBaseSize as usize,
-                pathname: Some(wstr_to_string(module.szExePath.as_ptr())),
+                pathname: Some(PathBuf::from(wstr_to_string(&module.szExePath))),
             });
 
             success = Module32NextW(handle, &mut module);
@@ -88,7 +88,7 @@ pub struct SymbolLoader {
 
 pub struct SymbolModule<'a> {
     pub parent: &'a SymbolLoader,
-    pub filename: &'a str,
+    pub filename: &'a Path,
     pub base: u64,
 }
 
@@ -121,12 +121,12 @@ impl SymbolLoader {
     }
 
     /// Loads symbols for filename, returns a SymbolModule structure that must be kept alive
-    pub fn load_module<'a>(&'a self, filename: &'a str) -> io::Result<SymbolModule<'a>> {
+    pub fn load_module<'a>(&'a self, filename: &'a Path) -> io::Result<SymbolModule<'a>> {
         unsafe {
             let base = SymLoadModuleExW(
                 self.process,
                 null_mut(),
-                string_to_wstr(filename).as_ptr(),
+                path_to_wstr(filename).as_ptr(),
                 null_mut(),
                 0,
                 0,
@@ -162,12 +162,19 @@ impl<'a> Drop for SymbolModule<'a> {
     }
 }
 
-fn wstr_to_string(ptr: *const u16) -> String {
-    let slice = unsafe { std::slice::from_raw_parts(ptr, wcslen(ptr)) };
-    OsString::from_wide(slice).to_string_lossy().into_owned()
+fn wstr_to_string(full: &[u16]) -> OsString {
+    let len = full.iter().position(|&x| x == 0).unwrap_or(full.len());
+    OsString::from_wide(&full[..len])
 }
 
-pub fn string_to_wstr(val: &str) -> Vec<u16> {
+fn string_to_wstr(val: &str) -> Vec<u16> {
+    OsStr::new(val)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
+}
+
+fn path_to_wstr(val: &Path) -> Vec<u16> {
     OsStr::new(val)
         .encode_wide()
         .chain(std::iter::once(0))

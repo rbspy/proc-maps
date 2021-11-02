@@ -1,9 +1,12 @@
 use libc::{c_char, c_int};
 use libc::{waitpid, PT_ATTACH, PT_DETACH, PT_VM_ENTRY, WIFSTOPPED};
 use std::convert::From;
-use std::ffi::CStr;
+use std::ffi::{CStr, OsStr};
+use std::io;
 use std::iter::Iterator;
-use std::{io, ptr};
+use std::os::unix::ffi::OsStrExt;
+use std::path::PathBuf;
+use std::ptr;
 
 use super::bindings::{caddr_t, ptrace_vm_entry};
 use super::Pid;
@@ -38,7 +41,7 @@ pub struct VmEntry {
     pub pve_pathlen: u32,
     pub pve_fileid: i64,
     pub pve_fsid: u32,
-    pub pve_path: Option<String>,
+    pub pve_path: Option<PathBuf>,
 }
 
 impl From<ptrace_vm_entry> for VmEntry {
@@ -126,15 +129,16 @@ impl Iterator for VmEntryIterator {
     }
 }
 
-fn string_from_cstr_ptr(pointer: *const c_char) -> Option<String> {
+fn string_from_cstr_ptr(pointer: *const c_char) -> Option<PathBuf> {
     if pointer.is_null() {
         None
     } else {
         unsafe {
-            let result = CStr::from_ptr(pointer).to_string_lossy().into_owned();
+            let cstr = CStr::from_ptr(pointer);
+            let osstr = OsStr::from_bytes(cstr.to_bytes());
 
-            if result.len() > 0 {
-                Some(result)
+            if osstr.len() > 0 {
+                Some(PathBuf::from(osstr))
             } else {
                 None
             }
