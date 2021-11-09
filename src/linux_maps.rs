@@ -121,8 +121,8 @@ fn test_parse_maps() {
             pathname: Some("[heap]".to_string()),
         },
         MapRange {
-            range_start: 0x7f438053b000,
-            range_end: 0x7f438053f000,
+            range_start: 0x7f438050,
+            range_end: 0x7f438060,
             offset: 0,
             dev: "fd:01".to_string(),
             flags: "r--p".to_string(),
