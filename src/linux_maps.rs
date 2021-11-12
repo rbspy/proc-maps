@@ -2,6 +2,7 @@ use libc;
 use std;
 use std::fs::File;
 use std::io::Read;
+use std::path::{Path, PathBuf};
 
 pub type Pid = libc::pid_t;
 
@@ -17,7 +18,7 @@ pub struct MapRange {
     pub dev: String,
     pub flags: String,
     pub inode: usize,
-    pathname: Option<String>,
+    pathname: Option<PathBuf>,
 }
 
 impl MapRange {
@@ -30,8 +31,8 @@ impl MapRange {
         self.range_start
     }
     /// Returns the filename of the loaded module
-    pub fn filename(&self) -> &Option<String> {
-        &self.pathname
+    pub fn filename(&self) -> Option<&Path> {
+        self.pathname.as_deref()
     }
     /// Returns whether this range contains executable code
     pub fn is_exec(&self) -> bool {
@@ -74,6 +75,11 @@ fn parse_proc_maps(contents: &str) -> Vec<MapRange> {
         let offset = split.next().unwrap();
         let dev = split.next().unwrap();
         let inode = split.next().unwrap();
+        let pathname = match Some(split.collect::<Vec<&str>>().join(" ")).filter(|x| !x.is_empty())
+        {
+            Some(s) => Some(PathBuf::from(s)),
+            None => None,
+        };
 
         vec.push(MapRange {
             range_start: usize::from_str_radix(range_start, 16).unwrap(),
@@ -82,7 +88,7 @@ fn parse_proc_maps(contents: &str) -> Vec<MapRange> {
             dev: dev.to_string(),
             flags: flags.to_string(),
             inode: usize::from_str_radix(inode, 10).unwrap(),
-            pathname: Some(split.collect::<Vec<&str>>().join(" ")).filter(|x| !x.is_empty()),
+            pathname,
         });
     }
     vec
@@ -100,7 +106,7 @@ fn test_parse_maps() {
             dev: "00:14".to_string(),
             flags: "r-xp".to_string(),
             inode: 205736,
-            pathname: Some("/usr/bin/fish".to_string()),
+            pathname: Some(PathBuf::from("/usr/bin/fish")),
         },
         MapRange {
             range_start: 0x00708000,
@@ -118,7 +124,7 @@ fn test_parse_maps() {
             dev: "00:00".to_string(),
             flags: "rw-p".to_string(),
             inode: 0,
-            pathname: Some("[heap]".to_string()),
+            pathname: Some(PathBuf::from("[heap]")),
         },
         MapRange {
             range_start: 0x7f438050,
@@ -127,9 +133,9 @@ fn test_parse_maps() {
             dev: "fd:01".to_string(),
             flags: "r--p".to_string(),
             inode: 59034409,
-            pathname: Some(
-                "/usr/lib/x86_64-linux-gnu/libgmodule-2.0.so.0.4200.6 (deleted)".to_string(),
-            ),
+            pathname: Some(PathBuf::from(
+                "/usr/lib/x86_64-linux-gnu/libgmodule-2.0.so.0.4200.6 (deleted)",
+            )),
         },
     ];
     assert_eq!(vec, expected);
