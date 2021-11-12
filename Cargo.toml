@@ -1,7 +1,7 @@
 [package]
 name = "proc-maps"
-version = "0.1.9"
-authors = ["Julia Evans <julia@jvns.ca>", "Ben Frederickson <github@benfrederickson.com>"]
+version = "0.2.0"
+authors = ["Julia Evans <julia@jvns.ca>", "Ben Frederickson <github@benfrederickson.com>", "Adam Jensen <adam@acj.sh>"]
 description = "Helper crate for getting virtual memory maps from processes"
 license = "MIT"
 homepage = "https://github.com/rbspy/proc-maps"
