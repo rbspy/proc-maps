@@ -19,8 +19,8 @@ libproc = "0.10.0"
 winapi = {version = "0.3", features = ["tlhelp32", "processthreadsapi", "handleapi", "impl-default", "dbghelp"]}
 
 [target.'cfg(target_os="freebsd")'.build-dependencies]
-bindgen = "0.59.1"
+bindgen = { version = "0.59.1", optional = true }
 
 [features]
 default = ["generate-bindings"]
-generate-bindings = []
+generate-bindings = ["bindgen"]

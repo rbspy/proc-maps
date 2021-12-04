@@ -1,4 +1,4 @@
-#[cfg(target_os = "freebsd")]
+#[cfg(all(feature = "generate-bindings", target_os = "freebsd"))]
 extern crate bindgen;
 
 fn main() {
