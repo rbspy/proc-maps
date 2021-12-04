@@ -20,3 +20,7 @@ winapi = {version = "0.3", features = ["tlhelp32", "processthreadsapi", "handlea
 
 [target.'cfg(target_os="freebsd")'.build-dependencies]
 bindgen = "0.59.1"
+
+[features]
+default = ["generate-bindings"]
+generate-bindings = []

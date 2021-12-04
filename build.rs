@@ -2,7 +2,7 @@
 extern crate bindgen;
 
 fn main() {
-    #[cfg(target_os = "freebsd")]
+    #[cfg(all(feature = "generate-bindings", target_os = "freebsd"))]
     {
         println!("cargo:rerun-if-changed=src/freebsd_maps/wrapper.h");
 
