@@ -28,6 +28,7 @@ pub struct MapRange {
     size: mach_vm_size_t,
     info: vm_region_basic_info_data_t,
     start: mach_vm_address_t,
+    #[allow(dead_code)]
     count: mach_msg_type_number_t,
     filename: Option<PathBuf>,
 }
