@@ -76,7 +76,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-${{ matrix.target }}-cargo-
     - name: Build
-      run: ${{ env.CARGO }} build --release --locked --verbose --workspace --all-targets ${{ env.TARGET_FLAGS }}
+      run: ${{ env.CARGO }} build --release --verbose --workspace --all-targets ${{ env.TARGET_FLAGS }}
     - name: Run tests
       timeout-minutes: 5
       run: ${{ env.CARGO }} test --release --verbose  ${{ env.TARGET_FLAGS }}
