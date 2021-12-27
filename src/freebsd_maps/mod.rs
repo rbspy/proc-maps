@@ -13,6 +13,7 @@ use MapRangeImpl;
 pub type Pid = pid_t;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct MapRange {
     range_start: usize,
     range_end: usize,
