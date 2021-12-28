@@ -115,3 +115,82 @@ fn map_contain_addr(map: &MapRange, addr: usize) -> bool {
 pub fn maps_contain_addr(addr: usize, maps: &[MapRange]) -> bool {
     maps.iter().any(|map| map_contain_addr(map, addr))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+    use std::path::PathBuf;
+
+    use crate::get_process_maps;
+    use crate::Pid;
+
+    fn test_process_path() -> Option<PathBuf> {
+        env::current_exe().ok().and_then(|p| {
+            p.parent().map(|p| {
+                p.with_file_name("test")
+                    .with_extension(env::consts::EXE_EXTENSION)
+            })
+        })
+    }
+
+    #[cfg(not(target_os = "freebsd"))]
+    #[test]
+    fn test_map_from_test_binary_present() -> () {
+        let maps = get_process_maps(std::process::id() as Pid).unwrap();
+
+        let region = maps.iter().find(|map| {
+            if let Some(filename) = map.filename() {
+                filename.to_string_lossy().contains("proc_maps")
+            } else {
+                false
+            }
+        });
+
+        assert!(
+            region.is_some(),
+            "We should have a map for the current test process"
+        );
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn test_map_from_invoked_binary_present() -> () {
+        let path = test_process_path().unwrap();
+        if !path.exists() {
+            println!("Skipping test because the 'test' binary hasn't been built");
+            return;
+        }
+
+        let mut have_expected_map = false;
+        // The maps aren't populated immediately on Linux, so retry a few times if needed
+        for _ in 1..10 {
+            let mut child = std::process::Command::new(&path)
+                .spawn()
+                .expect("failed to execute test process");
+
+            let maps = get_process_maps(child.id() as Pid).unwrap();
+
+            child.kill().expect("failed to kill test process");
+
+            let region = maps.iter().find(|map| {
+                if let Some(filename) = map.filename() {
+                    filename.to_string_lossy().contains("/test")
+                } else {
+                    false
+                }
+            });
+
+            if region.is_some() {
+                have_expected_map = true;
+                break;
+            } else {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+
+        assert!(
+            have_expected_map,
+            "We should have a map from the binary we invoked!"
+        );
+    }
+}

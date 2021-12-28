@@ -64,27 +64,6 @@ pub fn get_process_maps(pid: Pid) -> std::io::Result<Vec<MapRange>> {
 }
 
 #[test]
-fn test_map_from_invoked_binary_present() -> () {
-    use std::process::Command;
-    let mut child = Command::new("/bin/cat")
-        .spawn()
-        .expect("failed to execute /bin/cat");
-
-    let maps = get_process_maps(child.id() as Pid).unwrap();
-
-    child.kill().expect("failed to kill test process");
-
-    let maybe_cat_region = maps
-        .iter()
-        .find(|map| map.filename() == Some(&PathBuf::from("/bin/cat")));
-
-    assert!(
-        maybe_cat_region.is_some(),
-        "We should have a map from the binary we invoked!"
-    );
-}
-
-#[test]
 fn test_write_xor_execute_policy() -> () {
     use std::process::Command;
     let mut child = Command::new("/bin/cat")
