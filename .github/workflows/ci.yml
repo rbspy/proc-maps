@@ -18,10 +18,8 @@ jobs:
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
+        default: true
         toolchain: stable
-        override: true
-        profile: minimal
-        components: rustfmt
     - name: Run cargo fmt
       run: |
         cargo fmt --all -- --check
@@ -60,9 +58,8 @@ jobs:
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
+        default: true
         toolchain: stable
-        profile: minimal
-        override: true
     - name: Install Rust toolchain target
       run: |
         rustup target add ${{ matrix.target }}
