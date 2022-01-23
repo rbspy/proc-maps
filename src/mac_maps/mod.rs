@@ -1,16 +1,16 @@
 use anyhow::Error;
 use libc::{c_int, pid_t, strlen};
 use libproc::libproc::proc_pid::regionfilename;
-use mach;
-use mach::kern_return::{kern_return_t, KERN_SUCCESS};
-use mach::mach_types::vm_task_entry_t;
-use mach::message::mach_msg_type_number_t;
-use mach::port::{mach_port_name_t, mach_port_t, MACH_PORT_NULL};
-use mach::vm_region::{
+use mach2;
+use mach2::kern_return::{kern_return_t, KERN_SUCCESS};
+use mach2::mach_types::vm_task_entry_t;
+use mach2::message::mach_msg_type_number_t;
+use mach2::port::{mach_port_name_t, mach_port_t, MACH_PORT_NULL};
+use mach2::vm_region::{
     vm_region_basic_info_data_64_t, vm_region_basic_info_data_t, vm_region_info_t,
     VM_REGION_BASIC_INFO,
 };
-use mach::vm_types::{mach_vm_address_t, mach_vm_size_t};
+use mach2::vm_types::{mach_vm_address_t, mach_vm_size_t};
 use std;
 use std::io;
 use std::mem;
@@ -84,13 +84,13 @@ impl MapRangeImpl for MapRange {
     }
 
     fn is_exec(&self) -> bool {
-        self.info.protection & mach::vm_prot::VM_PROT_EXECUTE != 0
+        self.info.protection & mach2::vm_prot::VM_PROT_EXECUTE != 0
     }
     fn is_write(&self) -> bool {
-        self.info.protection & mach::vm_prot::VM_PROT_WRITE != 0
+        self.info.protection & mach2::vm_prot::VM_PROT_WRITE != 0
     }
     fn is_read(&self) -> bool {
-        self.info.protection & mach::vm_prot::VM_PROT_READ != 0
+        self.info.protection & mach2::vm_prot::VM_PROT_READ != 0
     }
 }
 
@@ -133,7 +133,7 @@ fn mach_vm_region(
     let mut size = unsafe { mem::zeroed::<mach_vm_size_t>() };
     let mut info = unsafe { mem::zeroed::<vm_region_basic_info_data_t>() };
     let result = unsafe {
-        mach::vm::mach_vm_region(
+        mach2::vm::mach_vm_region(
             target_task as vm_task_entry_t,
             &mut address,
             &mut size,
@@ -167,7 +167,7 @@ pub fn task_for_pid(pid: Pid) -> io::Result<mach_port_name_t> {
     std::thread::sleep(std::time::Duration::from_millis(10));
     unsafe {
         let result =
-            mach::traps::task_for_pid(mach::traps::mach_task_self(), pid as c_int, &mut task);
+            mach2::traps::task_for_pid(mach2::traps::mach_task_self(), pid as c_int, &mut task);
         if result != KERN_SUCCESS {
             return Err(io::Error::last_os_error());
         }
@@ -195,8 +195,8 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
     // This gets addresses to TEXT sections ... but we really want addresses to DATA
     // this is a good start though
     // hmm
-    use mach::task::task_info;
-    use mach::task_info::{task_info_t, TASK_DYLD_INFO};
+    use mach2::task::task_info;
+    use mach2::task_info::{task_info_t, TASK_DYLD_INFO};
 
     let mut vec = Vec::new();
     let task = task_for_pid(pid)?;
@@ -370,5 +370,5 @@ extern "C" {
 pub struct task_dyld_info {
     pub all_image_info_addr: mach_vm_address_t,
     pub all_image_info_size: mach_vm_size_t,
-    pub all_image_info_format: mach::vm_types::integer_t,
+    pub all_image_info_format: mach2::vm_types::integer_t,
 }
