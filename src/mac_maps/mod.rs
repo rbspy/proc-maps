@@ -261,7 +261,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
     }
 
     for module in modules {
-        let mut read_len = 512 as mach_vm_size_t;
+        let mut read_len = 512_u64;
         let mut image_filename = [0_i8; 512];
         let result = unsafe {
             vm_read_overwrite(
