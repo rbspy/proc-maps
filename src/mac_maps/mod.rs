@@ -224,7 +224,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         }
     }
 
-    // Read in the dyld_all_image_infos information here here.
+    // Read in the dyld_all_image_infos information here.
     let mut image_infos = dyld_all_image_infos::default();
     let mut read_len = std::mem::size_of_val(&image_infos) as mach_vm_size_t;
 
@@ -243,7 +243,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         return Err(io::Error::last_os_error());
     }
 
-    // copy the infoArray element of dyld_all_image_infos ovber
+    // copy the infoArray element of dyld_all_image_infos over
     let mut modules = vec![dyld_image_info::default(); image_infos.infoArrayCount as usize];
     let mut read_len = (std::mem::size_of::<dyld_image_info>()
         * image_infos.infoArrayCount as usize) as mach_vm_size_t;
