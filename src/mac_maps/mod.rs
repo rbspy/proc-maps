@@ -209,9 +209,10 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         all_image_info_format: 0,
     };
 
-    // TASK_DYLD_INFO_COUNT is #define'd to be 5 in /usr/include/mach/task_info.h
-    // ... doesn't seem to be included in the mach crate =(
-    let mut count: mach_msg_type_number_t = 5;
+    const TASK_DYLD_INFO_COUNT: mach_msg_type_number_t = (mem::size_of::<task_dyld_info>()
+        / mem::size_of::<mach2::vm_types::natural_t>())
+        as mach_msg_type_number_t;
+    let mut count = TASK_DYLD_INFO_COUNT;
     unsafe {
         if task_info(
             task,
