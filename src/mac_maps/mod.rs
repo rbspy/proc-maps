@@ -20,7 +20,7 @@ use MapRangeImpl;
 
 mod dyld_bindings;
 use self::dyld_bindings::{
-    dyld_all_image_infos, dyld_image_info, mach_header_64, segment_command_64,
+    dyld_all_image_infos, dyld_image_info, mach_header_64, segment_command_64, task_dyld_info,
 };
 
 pub type Pid = pid_t;
@@ -361,15 +361,4 @@ extern "C" {
         data: mach_vm_address_t,
         out_size: *mut mach_vm_size_t,
     ) -> kern_return_t;
-}
-
-// bindgen seemed to put all the members for this struct as a single opaque blob:
-//      (bindgen /usr/include/mach/task_info.h --with-derive-default --whitelist-type task_dyld_info)
-// rather than debug the bindgen command, just define manually here
-#[repr(C)]
-#[derive(Default, Debug)]
-pub struct task_dyld_info {
-    pub all_image_info_addr: mach_vm_address_t,
-    pub all_image_info_size: mach_vm_size_t,
-    pub all_image_info_format: mach2::vm_types::integer_t,
 }
