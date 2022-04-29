@@ -6,10 +6,7 @@ use mach2::kern_return::{kern_return_t, KERN_SUCCESS};
 use mach2::mach_types::vm_task_entry_t;
 use mach2::message::mach_msg_type_number_t;
 use mach2::port::{mach_port_name_t, mach_port_t, MACH_PORT_NULL};
-use mach2::vm_region::{
-    vm_region_basic_info_data_64_t, vm_region_basic_info_data_t, vm_region_info_t,
-    VM_REGION_BASIC_INFO,
-};
+use mach2::vm_region::{vm_region_basic_info_data_64_t, vm_region_info_t, VM_REGION_BASIC_INFO_64};
 use mach2::vm_types::{mach_vm_address_t, mach_vm_size_t};
 use std;
 use std::io;
@@ -28,7 +25,7 @@ pub type Pid = pid_t;
 #[derive(Debug, Clone)]
 pub struct MapRange {
     size: mach_vm_size_t,
-    info: vm_region_basic_info_data_t,
+    info: vm_region_basic_info_data_64_t,
     start: mach_vm_address_t,
     #[allow(dead_code)]
     count: mach_msg_type_number_t,
@@ -131,14 +128,14 @@ fn mach_vm_region(
     let mut count = mem::size_of::<vm_region_basic_info_data_64_t>() as mach_msg_type_number_t;
     let mut object_name: mach_port_t = 0;
     let mut size = unsafe { mem::zeroed::<mach_vm_size_t>() };
-    let mut info = unsafe { mem::zeroed::<vm_region_basic_info_data_t>() };
+    let mut info = unsafe { mem::zeroed::<vm_region_basic_info_data_64_t>() };
     let result = unsafe {
         mach2::vm::mach_vm_region(
             target_task as vm_task_entry_t,
             &mut address,
             &mut size,
-            VM_REGION_BASIC_INFO,
-            &mut info as *mut vm_region_basic_info_data_t as vm_region_info_t,
+            VM_REGION_BASIC_INFO_64,
+            &mut info as *mut vm_region_basic_info_data_64_t as vm_region_info_t,
             &mut count,
             &mut object_name,
         )
