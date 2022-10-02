@@ -9,10 +9,15 @@ use winapi::um::dbghelp::{
     SymCleanup, SymFromNameW, SymInitializeW, SymLoadModuleExW, SymUnloadModule64, SYMBOL_INFOW,
 };
 use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
+use winapi::um::memoryapi::VirtualQueryEx;
 use winapi::um::processthreadsapi::OpenProcess;
+use winapi::um::sysinfoapi::{GetSystemInfo, SYSTEM_INFO};
 use winapi::um::tlhelp32::{CreateToolhelp32Snapshot, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32};
 use winapi::um::tlhelp32::{Module32FirstW, Module32NextW, MODULEENTRY32W};
-use winapi::um::winnt::{HANDLE, PROCESS_VM_READ};
+use winapi::um::winnt::{HANDLE, PROCESS_VM_READ, PROCESS_QUERY_INFORMATION};
+use winapi::um::winnt::{MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_IMAGE};
+use winapi::um::winnt::{PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE};
+use winapi::um::winnt::{PAGE_EXECUTE_WRITECOPY, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY};
 
 use MapRangeImpl;
 
@@ -23,6 +28,9 @@ pub struct MapRange {
     base_addr: usize,
     base_size: usize,
     pathname: Option<PathBuf>,
+    read: bool,
+    write: bool,
+    exec: bool,
 }
 
 impl MapRangeImpl for MapRange {
@@ -36,17 +44,71 @@ impl MapRangeImpl for MapRange {
         self.pathname.as_deref()
     }
     fn is_exec(&self) -> bool {
-        true
+        self.exec
     }
     fn is_write(&self) -> bool {
-        true
+        self.write
     }
     fn is_read(&self) -> bool {
-        true
+        self.read
     }
 }
 
 pub fn get_process_maps(pid: Pid) -> io::Result<Vec<MapRange>> {
+    let mut modules = get_process_modules(pid)?;
+    modules.sort_by_key(|m| m.base_addr);
+    let page_ranges = get_process_page_ranges(pid)?;
+    let mut maps = Vec::<MapRange>::with_capacity(page_ranges.len());
+    for page_range in page_ranges {
+        maps.push(MapRange {
+            base_addr: page_range.base_addr,
+            base_size: page_range.base_size,
+            pathname: find_pathname(&modules, &page_range),
+            read: page_range.read,
+            write: page_range.write,
+            exec: page_range.exec,
+        });
+    }
+    Ok(maps)
+}
+
+/// Find pathname of module containing this page range, if any.
+/// Assumes that modules are sorted by base address and do not overlap.
+fn find_pathname(modules: &Vec<Module>, page_range: &PageRange) -> Option<PathBuf> {
+    if !page_range.image {
+        return None
+    }
+
+    // Find module with the same base address or that could contain it.
+    let module: &Module = match modules.binary_search_by_key(&page_range.base_addr, |m| m.base_addr) {
+        Ok(i) => &modules[i],
+        Err(0) => return None,
+        Err(i) => &modules[i - 1],
+    };
+
+    if module.contains(page_range) {
+        Some(module.pathname.clone())
+    } else {
+        None
+    }
+}
+
+/// The memory region where an executable or DLL was loaded.
+struct Module {
+    base_addr: usize,
+    base_size: usize,
+    pathname: PathBuf,
+}
+
+impl Module {
+    fn contains(&self, page_range: &PageRange) -> bool {
+        self.base_addr <= page_range.base_addr
+            && page_range.base_addr + page_range.base_size <= self.base_addr + self.base_size
+    }
+}
+
+/// Uses the Tool Help API to list all modules.
+fn get_process_modules(pid: Pid) -> io::Result<Vec<Module>> {
     unsafe {
         let handle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
         if handle == INVALID_HANDLE_VALUE {
@@ -66,15 +128,76 @@ pub fn get_process_maps(pid: Pid) -> io::Result<Vec<MapRange>> {
 
         let mut vec = Vec::new();
         while success != 0 {
-            vec.push(MapRange {
+            vec.push(Module {
                 base_addr: module.modBaseAddr as usize,
                 base_size: module.modBaseSize as usize,
-                pathname: Some(PathBuf::from(wstr_to_string(&module.szExePath))),
+                pathname: PathBuf::from(wstr_to_string(&module.szExePath)),
             });
 
             success = Module32NextW(handle, &mut module);
         }
         CloseHandle(handle);
+        Ok(vec)
+    }
+}
+
+/// A range of pages in the virtual address space of a process.
+struct PageRange {
+    base_addr: usize,
+    base_size: usize,
+    image: bool,
+    read: bool,
+    write: bool,
+    exec: bool,
+}
+
+/// Uses `VirtualQueryEx` to get info on *every* memory page range in the process.
+fn get_process_page_ranges(pid: Pid) -> io::Result<Vec<PageRange>> {
+    unsafe {
+        let mut sysinfo = SYSTEM_INFO {
+            ..Default::default()
+        };
+        GetSystemInfo(&mut sysinfo);
+
+        let mut vec = Vec::new();
+
+        let process = OpenProcess(PROCESS_QUERY_INFORMATION , FALSE, pid as DWORD);
+        if process == INVALID_HANDLE_VALUE {
+            return Err(io::Error::last_os_error());
+        }
+
+        let mut meminfo = MEMORY_BASIC_INFORMATION {
+            ..Default::default()
+        };
+        let buffer_size = std::mem::size_of_val(&meminfo);
+
+        let mut address = sysinfo.lpMinimumApplicationAddress;
+        while address < sysinfo.lpMaximumApplicationAddress {
+            let bytes_returned = VirtualQueryEx(process, address, &mut meminfo, buffer_size);
+            if bytes_returned != buffer_size {
+                CloseHandle(process);
+                return Err(io::Error::last_os_error());
+            }
+
+            if meminfo.State & MEM_COMMIT != 0 {
+                // Skip free pages and pages that are reserved but not allocated.
+                vec.push(PageRange {
+                    base_addr: meminfo.BaseAddress as usize,
+                    base_size: meminfo.RegionSize as usize,
+                    image: meminfo.Type & MEM_IMAGE != 0,
+                    read: meminfo.Protect & (PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE
+                        | PAGE_EXECUTE_WRITECOPY | PAGE_READONLY | PAGE_READWRITE
+                        | PAGE_WRITECOPY) != 0,
+                    write: meminfo.Protect & (PAGE_EXECUTE_READWRITE | PAGE_READWRITE) != 0,
+                    exec: meminfo.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE
+                        | PAGE_EXECUTE_WRITECOPY) != 0
+                });
+            }
+
+            address = meminfo.BaseAddress.add(meminfo.RegionSize);
+        }
+
+        CloseHandle(process);
         Ok(vec)
     }
 }
