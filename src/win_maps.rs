@@ -14,7 +14,7 @@ use winapi::um::processthreadsapi::OpenProcess;
 use winapi::um::sysinfoapi::{GetSystemInfo, SYSTEM_INFO};
 use winapi::um::tlhelp32::{CreateToolhelp32Snapshot, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32};
 use winapi::um::tlhelp32::{Module32FirstW, Module32NextW, MODULEENTRY32W};
-use winapi::um::winnt::{HANDLE, PROCESS_VM_READ, PROCESS_QUERY_INFORMATION};
+use winapi::um::winnt::{HANDLE, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
 use winapi::um::winnt::{MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_IMAGE};
 use winapi::um::winnt::{PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE};
 use winapi::um::winnt::{PAGE_EXECUTE_WRITECOPY, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY};
@@ -76,11 +76,12 @@ pub fn get_process_maps(pid: Pid) -> io::Result<Vec<MapRange>> {
 /// Assumes that modules are sorted by base address and do not overlap.
 fn find_pathname(modules: &Vec<Module>, page_range: &PageRange) -> Option<PathBuf> {
     if !page_range.image {
-        return None
+        return None;
     }
 
     // Find module with the same base address or that could contain it.
-    let module: &Module = match modules.binary_search_by_key(&page_range.base_addr, |m| m.base_addr) {
+    let module: &Module = match modules.binary_search_by_key(&page_range.base_addr, |m| m.base_addr)
+    {
         Ok(i) => &modules[i],
         Err(0) => return None,
         Err(i) => &modules[i - 1],
@@ -161,7 +162,7 @@ fn get_process_page_ranges(pid: Pid) -> io::Result<Vec<PageRange>> {
 
         let mut vec = Vec::new();
 
-        let process = OpenProcess(PROCESS_QUERY_INFORMATION , FALSE, pid as DWORD);
+        let process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid as DWORD);
         if process == INVALID_HANDLE_VALUE {
             return Err(io::Error::last_os_error());
         }
@@ -185,12 +186,21 @@ fn get_process_page_ranges(pid: Pid) -> io::Result<Vec<PageRange>> {
                     base_addr: meminfo.BaseAddress as usize,
                     base_size: meminfo.RegionSize as usize,
                     image: meminfo.Type & MEM_IMAGE != 0,
-                    read: meminfo.Protect & (PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE
-                        | PAGE_EXECUTE_WRITECOPY | PAGE_READONLY | PAGE_READWRITE
-                        | PAGE_WRITECOPY) != 0,
+                    read: meminfo.Protect
+                        & (PAGE_EXECUTE_READ
+                            | PAGE_EXECUTE_READWRITE
+                            | PAGE_EXECUTE_WRITECOPY
+                            | PAGE_READONLY
+                            | PAGE_READWRITE
+                            | PAGE_WRITECOPY)
+                        != 0,
                     write: meminfo.Protect & (PAGE_EXECUTE_READWRITE | PAGE_READWRITE) != 0,
-                    exec: meminfo.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE
-                        | PAGE_EXECUTE_WRITECOPY) != 0
+                    exec: meminfo.Protect
+                        & (PAGE_EXECUTE
+                            | PAGE_EXECUTE_READ
+                            | PAGE_EXECUTE_READWRITE
+                            | PAGE_EXECUTE_WRITECOPY)
+                        != 0,
                 });
             }
 
