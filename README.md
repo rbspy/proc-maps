@@ -1,6 +1,6 @@
 proc-maps
 =========
-[![Build Status](https://github.com/acj/proc-maps/actions/workflows/ci.yml/badge.svg)](https://github.com/rbspy/proc-maps/actions/workflows/ci.yml)
+[![Build Status](https://github.com/rbspy/proc-maps/actions/workflows/ci.yml/badge.svg)](https://github.com/rbspy/proc-maps/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/proc-maps.svg)](https://crates.io/crates/proc-maps)
 [![docs.rs](https://docs.rs/proc-maps/badge.svg)](https://docs.rs/proc-maps)
 
