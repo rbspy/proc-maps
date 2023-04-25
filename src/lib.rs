@@ -118,17 +118,15 @@ pub fn maps_contain_addr(addr: usize, maps: &[MapRange]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-    use std::path::PathBuf;
-
     use crate::get_process_maps;
     use crate::Pid;
 
-    fn test_process_path() -> Option<PathBuf> {
-        env::current_exe().ok().and_then(|p| {
+    #[cfg(not(target_os = "windows"))]
+    fn test_process_path() -> Option<std::path::PathBuf> {
+        std::env::current_exe().ok().and_then(|p| {
             p.parent().map(|p| {
                 p.with_file_name("test")
-                    .with_extension(env::consts::EXE_EXTENSION)
+                    .with_extension(std::env::consts::EXE_EXTENSION)
             })
         })
     }
