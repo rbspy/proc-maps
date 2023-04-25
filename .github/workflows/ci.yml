@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
@@ -59,7 +59,7 @@ jobs:
           target: x86_64-pc-windows-msvc
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
@@ -69,7 +69,7 @@ jobs:
       run: |
         rustup target add ${{ matrix.target }}
     - name: Cargo Cache
-      uses: actions/cache@v2.1.4
+      uses: actions/cache@v3
       with:
         path: |
           ~/.cargo/registry
@@ -99,16 +99,16 @@ jobs:
           - fbsd_12_2
           - fbsd_13_0
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Cache Vagrant box
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.vagrant.d
           key: ${{ matrix.box }}-vagrant-boxes-20230425-${{ hashFiles('ci/Vagrantfile') }}
           restore-keys: |
             ${{ matrix.box }}-vagrant-20230425-
       - name: Cache Cargo and build artifacts
-        uses: actions/cache@v2.1.4
+        uses: actions/cache@v3
         with:
           path: build-artifacts.tar
           key: ${{ matrix.box }}-cargo-20230425-${{ hashFiles('**/Cargo.lock') }}
