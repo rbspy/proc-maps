@@ -14,12 +14,9 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        default: true
-        toolchain: stable
+      uses: dtolnay/rust-toolchain@984d158d699777abbaa79de23de3134e60c187fa # stable branch
     - name: Run cargo fmt
       run: |
         cargo fmt --all -- --check
@@ -37,20 +34,20 @@ jobs:
       matrix:
         build:
         - linux-x86_64
-        - macos-10.15
         - macos-11
+        - macos-12
         - windows
         include:
         - build: linux-x86_64
           os: ubuntu-20.04
           run-tests: 'true'
           target: x86_64-unknown-linux-gnu
-        - build: macos-10.15
-          os: macos-10.15
-          run-tests: 'true'
-          target: x86_64-apple-darwin
         - build: macos-11
           os: macos-11
+          run-tests: 'true'
+          target: x86_64-apple-darwin
+        - build: macos-12
+          os: macos-12
           run-tests: 'true'
           target: x86_64-apple-darwin
         - build: windows
@@ -59,17 +56,14 @@ jobs:
           target: x86_64-pc-windows-msvc
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        default: true
-        toolchain: stable
+      uses: dtolnay/rust-toolchain@984d158d699777abbaa79de23de3134e60c187fa # stable branch
     - name: Install Rust toolchain target
       run: |
         rustup target add ${{ matrix.target }}
     - name: Cargo Cache
-      uses: actions/cache@v2.1.4
+      uses: actions/cache@v3
       with:
         path: |
           ~/.cargo/registry
@@ -99,16 +93,16 @@ jobs:
           - fbsd_12_2
           - fbsd_13_0
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Cache Vagrant box
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.vagrant.d
           key: ${{ matrix.box }}-vagrant-boxes-20230425-${{ hashFiles('ci/Vagrantfile') }}
           restore-keys: |
             ${{ matrix.box }}-vagrant-20230425-
       - name: Cache Cargo and build artifacts
-        uses: actions/cache@v2.1.4
+        uses: actions/cache@v3
         with:
           path: build-artifacts.tar
           key: ${{ matrix.box }}-cargo-20230425-${{ hashFiles('**/Cargo.lock') }}
