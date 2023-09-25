@@ -204,7 +204,9 @@ fn get_process_page_ranges(pid: Pid) -> io::Result<Vec<PageRange>> {
                 });
             }
 
-            address = (meminfo.BaseAddress as *mut u8).add(meminfo.RegionSize).cast(); // as winapi::um::winnt::PVOID;
+            address = (meminfo.BaseAddress as *mut u8)
+                .add(meminfo.RegionSize)
+                .cast(); // as winapi::um::winnt::PVOID;
         }
 
         CloseHandle(process);
