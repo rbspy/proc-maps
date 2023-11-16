@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 
-source ~/.bash_profile
-
 set -e
 
-export CARGO_HOME="/vagrant/.cargo"
-mkdir -p $CARGO_HOME
+source "$HOME/.cargo/env"
 
 cd /vagrant
 
