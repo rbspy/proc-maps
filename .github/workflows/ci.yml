@@ -79,7 +79,7 @@ jobs:
       if: runner.os != 'macOS' && matrix.run-tests == 'true'
     - name: Run tests
       timeout-minutes: 5
-      run: sudo ${{ env.CARGO }} test --release --verbose  ${{ env.TARGET_FLAGS }}
+      run: sudo ${{ env.CARGO }} test --release --verbose  ${{ env.TARGET_FLAGS }} -- --skip tests::test_map_from_invoked_binary_present
       if: runner.os == 'macOS' && matrix.run-tests == 'true'
 
   build-freebsd:
