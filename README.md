@@ -7,18 +7,25 @@ proc-maps
 This crate supports reading virtual memory maps from another process - and supports
 Linux, macOS, Windows, and FreeBSD operating systems.
 
-Example:
+## Examples
 
-``` rust
+```rust
 use proc_maps::get_process_maps;
 
 let maps = get_process_maps(pid)?;
 for map in maps {
     println!("Filename {:?} Address {} Size {}", map.filename(), map.start(), map.size());
 }
-
 ```
+
+```sh
+cargo run --example print_maps <PID>
+```
+
+## Credits
 
 This code was originally developed by [Julia Evans](https://github.com/jvns) as part of the rbspy project: https://github.com/rbspy/rbspy.
 
-Release under the MIT License.
+## License
+
+Released under the MIT License.
