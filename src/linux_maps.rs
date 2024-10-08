@@ -140,3 +140,72 @@ fn test_parse_maps() {
     assert_eq!(super::maps_contain_addr(0x00400000, &vec), true);
     assert_eq!(super::maps_contain_addr(0x00300000, &vec), false);
 }
+
+#[test]
+fn test_contains_addr_range() {
+    let vec = vec![
+        MapRange {
+            range_start: 0x00400000,
+            range_end: 0x00500000,
+            offset: 0,
+            dev: "00:14".to_string(),
+            flags: "r-xp".to_string(),
+            inode: 205736,
+            pathname: Some(PathBuf::from("/usr/bin/fish")),
+        },
+        MapRange {
+            range_start: 0x00600000,
+            range_end: 0x00700000,
+            offset: 0,
+            dev: "00:14".to_string(),
+            flags: "r--p".to_string(),
+            inode: 205736,
+            pathname: Some(PathBuf::from("/usr/bin/fish")),
+        },
+        MapRange {
+            range_start: 0x00700000,
+            range_end: 0x00800000,
+            offset: 0,
+            dev: "00:14".to_string(),
+            flags: "r--p".to_string(),
+            inode: 205736,
+            pathname: Some(PathBuf::from("/usr/bin/fish")),
+        },
+    ];
+
+    assert_eq!(super::maps_contain_addr_range(0x00400000, 0x1, &vec), true);
+    assert_eq!(
+        super::maps_contain_addr_range(0x00400000, 0x100000, &vec),
+        true
+    );
+    assert_eq!(
+        super::maps_contain_addr_range(0x00500000 - 1, 1, &vec),
+        true
+    );
+    assert_eq!(
+        super::maps_contain_addr_range(0x00600000, 0x100001, &vec),
+        true
+    );
+    assert_eq!(
+        super::maps_contain_addr_range(0x00600000, 0x200000, &vec),
+        true
+    );
+
+    assert_eq!(
+        super::maps_contain_addr_range(0x00400000, 0x100001, &vec),
+        false
+    );
+    assert_eq!(
+        super::maps_contain_addr_range(0x00400000, usize::MAX, &vec),
+        false
+    );
+    assert_eq!(super::maps_contain_addr_range(0x00400000, 0, &vec), false);
+    assert_eq!(
+        super::maps_contain_addr_range(0x00400000, 0x00200000, &vec),
+        false
+    );
+    assert_eq!(
+        super::maps_contain_addr_range(0x00400000, 0x00200001, &vec),
+        false
+    );
+}

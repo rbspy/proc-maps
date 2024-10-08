@@ -116,6 +116,31 @@ pub fn maps_contain_addr(addr: usize, maps: &[MapRange]) -> bool {
     maps.iter().any(|map| map_contain_addr(map, addr))
 }
 
+/// Returns whether or not any MapRange contains the given address range.
+/// Note: this will only work correctly on macOS and Linux.
+pub fn maps_contain_addr_range(mut addr: usize, mut size: usize, maps: &[MapRange]) -> bool {
+    if size == 0 || addr.checked_add(size).is_none() {
+        return false;
+    }
+
+    while size > 0 {
+        match maps.iter().find(|map| map_contain_addr(map, addr)) {
+            None => return false,
+            Some(map) => {
+                let end = map.start() + map.size();
+                if addr + size <= end {
+                    return true;
+                } else {
+                    size -= end - addr;
+                    addr = end;
+                }
+            }
+        }
+    }
+
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use crate::get_process_maps;
