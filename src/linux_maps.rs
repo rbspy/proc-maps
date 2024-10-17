@@ -51,26 +51,73 @@ pub fn get_process_maps(pid: Pid) -> std::io::Result<Vec<MapRange>> {
     // Parses /proc/PID/maps into a Vec<MapRange>
     let maps_file = format!("/proc/{}/maps", pid);
     let mut file = File::open(maps_file)?;
+
+    // Check that the file is not too big
+    let metadata = file.metadata()?;
+    if metadata.len() > 0x10000000 {
+        return Err(std::io::Error::from_raw_os_error(libc::EFBIG));
+    }
+
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    Ok(parse_proc_maps(&contents))
+    parse_proc_maps(&contents)
 }
 
-fn parse_proc_maps(contents: &str) -> Vec<MapRange> {
+fn parse_proc_maps(contents: &str) -> std::io::Result<Vec<MapRange>> {
     let mut vec: Vec<MapRange> = Vec::new();
     for line in contents.split("\n") {
         let mut split = line.split_whitespace();
-        let range = split.next();
-        if range == None {
-            break;
+        let range = match split.next() {
+            None => break,
+            Some(s) => s,
+        };
+
+        let mut range_split = range.split("-");
+        let range_start = match range_split.next() {
+            None => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+            Some(s) => match usize::from_str_radix(s, 16) {
+                Err(_) => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+                Ok(i) => i,
+            },
+        };
+        let range_end = match range_split.next() {
+            None => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+            Some(s) => match usize::from_str_radix(s, 16) {
+                Err(_) => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+                Ok(i) => i,
+            },
+        };
+        if range_split.next().is_some() || range_start >= range_end {
+            return Err(std::io::Error::from_raw_os_error(libc::EINVAL));
         }
-        let mut range_split = range.unwrap().split("-");
-        let range_start = range_split.next().unwrap();
-        let range_end = range_split.next().unwrap();
-        let flags = split.next().unwrap();
-        let offset = split.next().unwrap();
-        let dev = split.next().unwrap();
-        let inode = split.next().unwrap();
+
+        let flags = match split.next() {
+            None => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+            Some(s) if s.len() < 3 => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+            Some(s) => s.to_string(),
+        };
+        let offset = match split.next() {
+            None => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+            Some(s) => match usize::from_str_radix(s, 16) {
+                Err(_) => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+                // mmap: offset must be a multiple of the page size as returned by sysconf(_SC_PAGE_SIZE).
+                Ok(i) if i & 0xfff != 0 => {
+                    return Err(std::io::Error::from_raw_os_error(libc::EINVAL));
+                }
+                Ok(i) => i,
+            },
+        };
+        let dev = match split.next() {
+            None => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+            Some(s) => s.to_string(),
+        };
+        let inode = match split.next() {
+            None => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+            Some(s) => match usize::from_str_radix(s, 10) {
+                Err(_) => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+                Ok(i) => i,
+            },
+        };
         let pathname = match Some(split.collect::<Vec<&str>>().join(" ")).filter(|x| !x.is_empty())
         {
             Some(s) => Some(PathBuf::from(s)),
@@ -78,22 +125,22 @@ fn parse_proc_maps(contents: &str) -> Vec<MapRange> {
         };
 
         vec.push(MapRange {
-            range_start: usize::from_str_radix(range_start, 16).unwrap(),
-            range_end: usize::from_str_radix(range_end, 16).unwrap(),
-            offset: usize::from_str_radix(offset, 16).unwrap(),
-            dev: dev.to_string(),
-            flags: flags.to_string(),
-            inode: usize::from_str_radix(inode, 10).unwrap(),
+            range_start,
+            range_end,
+            offset,
+            dev,
+            flags,
+            inode,
             pathname,
         });
     }
-    vec
+    Ok(vec)
 }
 
 #[test]
 fn test_parse_maps() {
     let contents = include_str!("../ci/testdata/map.txt");
-    let vec = parse_proc_maps(contents);
+    let vec = parse_proc_maps(contents).unwrap();
     let expected = vec![
         MapRange {
             range_start: 0x00400000,
