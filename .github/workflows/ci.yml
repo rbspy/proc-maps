@@ -107,6 +107,10 @@ jobs:
 
           ln -sf ci/Vagrantfile Vagrantfile
 
+          wget -q -O freebsd14.box https://vagrantcloud.com/roboxes/boxes/freebsd14/versions/4.3.12/providers/libvirt/amd64/vagrant.box
+          vagrant box add --name roboxes/freebsd14 freebsd14.box
+          vagrant box list
+
           vagrant status
           vagrant up --no-tty --provider libvirt ${{ matrix.box }}
       - name: Build and test
