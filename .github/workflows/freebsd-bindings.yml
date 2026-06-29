@@ -1,0 +1,50 @@
+name: Regenerate FreeBSD bindings
+
+on:
+  workflow_dispatch:
+
+jobs:
+  regenerate-bindings:
+    name: Regenerate bindings.rs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Launch Firecracker VM
+        uses: acj/freebsd-firecracker-action@v0.10.1
+        with:
+          verbose: false
+          disk-size: 6G
+          run-in-vm: |
+            pkg install -y rust llvm
+
+            llvm_bindir="$(dirname "$(command -v llvm-config)")"
+            export PATH="$llvm_bindir:$PATH"
+            export LIBCLANG_PATH="$(llvm-config --libdir)"
+            export CC=clang
+            export CXX=clang++
+            export RUSTFLAGS="-C linker=clang"
+
+            fetch -o /tmp/base.txz https://download.freebsd.org/releases/amd64/amd64/15.0-RELEASE/base.txz
+            tar -C / -xpf /tmp/base.txz ./usr/include ./usr/lib/libc_nonshared.a
+
+            cargo --version
+            rustc --version
+            clang --version
+            cargo build
+          post-run: |
+            mkdir -p artifacts/freebsd-bindings
+            rsync -r -e "ssh" \
+              --copy-links \
+              firecracker:src/freebsd_maps/bindings.rs \
+              artifacts/freebsd-bindings/bindings.rs
+
+      - name: Upload bindings artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: freebsd-bindings
+          path: artifacts/freebsd-bindings/bindings.rs
+          if-no-files-found: error
