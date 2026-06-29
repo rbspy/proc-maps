@@ -34,19 +34,24 @@ jobs:
       matrix:
         build:
         - linux-x86_64
-        - macos-14
-        - macos-15
+        - linux-aarch64
+        - macos-15-intel
+        - macos-15-arm
         - windows
         include:
         - build: linux-x86_64
           os: ubuntu-24.04
           run-tests: 'true'
           target: x86_64-unknown-linux-gnu
-        - build: macos-14
-          os: macos-14
+        - build: linux-aarch64
+          os: ubuntu-24.04-arm
+          run-tests: 'true'
+          target: aarch64-unknown-linux-gnu
+        - build: macos-15-intel
+          os: macos-15-intel
           run-tests: 'true'
           target: x86_64-apple-darwin
-        - build: macos-15
+        - build: macos-15-arm
           os: macos-15
           run-tests: 'true'
           target: aarch64-apple-darwin
