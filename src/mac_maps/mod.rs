@@ -105,7 +105,10 @@ impl MapRange {
  */
 pub fn get_process_maps(pid: Pid) -> io::Result<Vec<MapRange>> {
     let task = task_for_pid(pid)?;
-    let init_region = mach_vm_region(pid, task, 1).unwrap();
+    let init_region = match mach_vm_region(pid, task, 1) {
+        Some(r) => r,
+        None => return Ok(vec![]),
+    };
     let mut vec = vec![];
     let mut region = init_region.clone();
     vec.push(init_region);
