@@ -8,7 +8,7 @@ fn main() {
 
         let bindings = bindgen::Builder::default()
             .header("src/freebsd_maps/wrapper.h")
-            .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+            .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
             .generate()
             .expect("Unable to generate bindings");
 
