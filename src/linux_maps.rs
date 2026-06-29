@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use MapRangeImpl;
+use crate::MapRangeImpl;
 
 pub type Pid = libc::pid_t;
 

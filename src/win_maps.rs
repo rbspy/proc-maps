@@ -19,7 +19,7 @@ use winapi::um::winnt::{MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_IMAGE};
 use winapi::um::winnt::{PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE};
 use winapi::um::winnt::{PAGE_EXECUTE_WRITECOPY, PAGE_READONLY, PAGE_READWRITE, PAGE_WRITECOPY};
 
-use MapRangeImpl;
+use crate::MapRangeImpl;
 
 pub type Pid = u32;
 

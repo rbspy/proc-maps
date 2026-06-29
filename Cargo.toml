@@ -6,6 +6,7 @@ description = "Helper crate for getting virtual memory maps from processes"
 license = "MIT"
 homepage = "https://github.com/rbspy/proc-maps"
 repository = "https://github.com/rbspy/proc-maps"
+edition="2021"
 
 [dependencies]
 libc = "0.2.186"

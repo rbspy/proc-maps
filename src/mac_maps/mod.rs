@@ -13,7 +13,7 @@ use std::io;
 use std::mem;
 use std::path::{Path, PathBuf};
 
-use MapRangeImpl;
+use crate::MapRangeImpl;
 
 mod dyld_bindings;
 use self::dyld_bindings::{

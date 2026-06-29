@@ -8,7 +8,7 @@ use std::convert::From;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
 
-use MapRangeImpl;
+use crate::MapRangeImpl;
 
 pub type Pid = pid_t;
 
