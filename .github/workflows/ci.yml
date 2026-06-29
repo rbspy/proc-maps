@@ -84,35 +84,79 @@ jobs:
 
   build-freebsd:
     name: Build and test (freebsd-x86_64)
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        box:
-          - fbsd_14
     steps:
       - uses: actions/checkout@v4
-      - name: Display CPU info
-        run: lscpu
-      - name: Install VM tools
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@984d158d699777abbaa79de23de3134e60c187fa # stable branch
+
+      - uses: Swatinem/rust-cache@v2.7.8
+
+      - name: Cache cross binary
+        id: cache-cross
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/cross
+          key: ${{ runner.os }}-cross-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cross-
+
+      - name: Install cross
+        if: steps.cache-cross.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -qq -o=Dpkg::Use-Pty=0 moreutils
-          sudo chronic apt-get install -qq -o=Dpkg::Use-Pty=0 vagrant virtualbox qemu libvirt-daemon-system
-      - name: Set up VM
-        shell: sudo bash {0}
+          if [ ! -f "$HOME/.cargo/bin/cross" ]; then
+            cargo install cross --git https://github.com/cross-rs/cross --rev 51f46f296253d8122c927c5bb933e3c4f27cc317
+          fi
+          cross --version
+
+      - name: Cargo Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Cross-compile proc-maps
         run: |
-          vagrant plugin install vagrant-libvirt
+          cross build --no-default-features --release --workspace --all-targets --target x86_64-unknown-freebsd
+          cross test --no-default-features --release --no-run --target x86_64-unknown-freebsd
 
-          ln -sf ci/Vagrantfile Vagrantfile
+      - name: Launch Firecracker VM
+        uses: acj/freebsd-firecracker-action@v0.10.1
+        with:
+          verbose: false
+          pre-run: |
+            include_path="$(mktemp)"
+            cat <<EOF > "$include_path"
+            target
+            target/x86_64-unknown-freebsd
+            target/x86_64-unknown-freebsd/release
+            target/x86_64-unknown-freebsd/release/deps
+            target/x86_64-unknown-freebsd/release/deps/*
+            EOF
 
-          wget -q -O freebsd14.box https://vagrantcloud.com/roboxes/boxes/freebsd14/versions/4.3.12/providers/libvirt/amd64/vagrant.box
-          vagrant box add --name roboxes/freebsd14 freebsd14.box
-          vagrant box list
+            rsync -r -e "ssh" \
+              --relative \
+              --copy-links \
+              --include-from "$include_path" \
+              --exclude "*" \
+              . firecracker:
+            rm -f "$include_path"
+          run-in-vm: |
+            failed=0
+            for testbin in $(find target/x86_64-unknown-freebsd/release/deps -type f -perm -u+x ! -name "*.d" -print); do
+              if ! "$testbin"; then
+                failed=1
+              fi
+            done
 
-          vagrant status
-          vagrant up --no-tty --provider libvirt ${{ matrix.box }}
-      - name: Build and test
-        shell: sudo bash {0}
-        run: vagrant ssh ${{ matrix.box }} -- bash /vagrant/ci/scripts/freebsd-build.sh
+            if [ "$failed" -ne 0 ]; then
+              exit 1
+            fi
+          post-run: ""
