@@ -188,12 +188,24 @@ mod tests {
         // The maps aren't populated immediately on Linux, so retry a few times if needed
         for _ in 1..10 {
             let mut child = std::process::Command::new(&path)
+                .stdin(std::process::Stdio::piped())
                 .spawn()
                 .expect("failed to execute test process");
 
-            let maps = get_process_maps(child.id() as Pid).unwrap();
+            let maps = get_process_maps(child.id() as Pid);
 
             child.kill().expect("failed to kill test process");
+            child.wait().expect("failed to wait for test process");
+
+            let maps = match maps {
+                Ok(maps) => maps,
+                #[cfg(target_os = "macos")]
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    println!("Skipping test because reading another process's maps requires sudo");
+                    return;
+                }
+                Err(e) => panic!("failed to get process maps: {e}"),
+            };
 
             let region = maps.iter().find(|map| {
                 if let Some(filename) = map.filename() {
