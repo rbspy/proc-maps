@@ -12,6 +12,7 @@ use mach2::vm_region::{
 };
 use mach2::vm_types::{mach_vm_address_t, mach_vm_size_t};
 use std;
+use std::ffi::CStr;
 use std::io;
 use std::mem;
 use std::path::{Path, PathBuf};
@@ -212,11 +213,29 @@ pub fn task_for_pid(pid: Pid) -> io::Result<mach_port_name_t> {
         let result =
             mach2::traps::task_for_pid(mach2::traps::mach_task_self(), pid as c_int, &mut task);
         if result != KERN_SUCCESS {
-            return Err(io::Error::last_os_error());
+            return Err(task_for_pid_error(pid, result));
         }
     }
 
     Ok(task)
+}
+
+fn task_for_pid_error(pid: Pid, result: kern_return_t) -> io::Error {
+    let mach_error = unsafe {
+        let error = libc::mach_error_string(result);
+        if error.is_null() {
+            "unknown Mach error".to_string()
+        } else {
+            CStr::from_ptr(error).to_string_lossy().into_owned()
+        }
+    };
+    io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        format!(
+            "task_for_pid failed for pid {pid}: {mach_error} ({result}). \
+             On macOS, reading another process's maps usually requires running as root, e.g. with sudo."
+        ),
+    )
 }
 
 #[derive(Debug, Clone)]
