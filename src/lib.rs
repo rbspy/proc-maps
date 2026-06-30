@@ -216,4 +216,41 @@ mod tests {
             "We should have a map from the binary we invoked!"
         );
     }
+
+    // Regression test for https://github.com/rbspy/proc-maps/issues/25
+    // Anonymous regions (those `vmmap` reports with `SM=NUL`) must not be given the filename of
+    // a neighboring file-backed region.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn test_anonymous_map_has_no_filename() {
+        const LEN: usize = 256 * 1024;
+        let addr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                LEN,
+                libc::PROT_READ,
+                libc::MAP_ANON | libc::MAP_PRIVATE,
+                -1,
+                0,
+            )
+        };
+        assert_ne!(addr, libc::MAP_FAILED, "failed to mmap an anonymous region");
+        let addr = addr as usize;
+
+        let maps = get_process_maps(std::process::id() as Pid).unwrap();
+        let region = maps
+            .iter()
+            .find(|map| super::map_contain_addr(map, addr))
+            .expect("anonymous region should appear in the process maps");
+        let filename = region.filename().map(|p| p.to_path_buf());
+
+        unsafe {
+            libc::munmap(addr as *mut libc::c_void, LEN);
+        }
+
+        assert_eq!(
+            filename, None,
+            "anonymous region should not have a filename, got {filename:?}"
+        );
+    }
 }

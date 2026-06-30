@@ -6,7 +6,10 @@ use mach2::kern_return::{kern_return_t, KERN_SUCCESS};
 use mach2::mach_types::vm_task_entry_t;
 use mach2::message::mach_msg_type_number_t;
 use mach2::port::{mach_port_name_t, mach_port_t, MACH_PORT_NULL};
-use mach2::vm_region::{vm_region_basic_info_data_64_t, vm_region_info_t, VM_REGION_BASIC_INFO_64};
+use mach2::vm_region::{
+    vm_region_basic_info_data_64_t, vm_region_extended_info, vm_region_extended_info_data_t,
+    vm_region_info_t, SM_EMPTY, VM_REGION_BASIC_INFO_64, VM_REGION_EXTENDED_INFO,
+};
 use mach2::vm_types::{mach_vm_address_t, mach_vm_size_t};
 use std;
 use std::io;
@@ -146,9 +149,19 @@ fn mach_vm_region(
     if result != KERN_SUCCESS {
         return None;
     }
-    let filename = match regionfilename(pid, address) {
-        Ok(s) => Some(PathBuf::from(s.as_str())),
-        _ => None,
+    // `proc_regionfilename` (via `regionfilename`) is unreliable for anonymous regions. For an
+    // address that falls in a region with no backing file it often succeeds and returns the path of
+    // a neighboring file-backed region instead of failing. `vmmap` avoids this by inspecting the
+    // region's share mode, so we do the same here and only trust the filename when the region is not
+    // anonymous.
+    let is_anonymous = mach_vm_region_share_mode(target_task, address) == Some(SM_EMPTY);
+    let filename = if is_anonymous {
+        None
+    } else {
+        match regionfilename(pid, address) {
+            Ok(s) => Some(PathBuf::from(s.as_str())),
+            _ => None,
+        }
     };
     Some(MapRange {
         size,
@@ -157,6 +170,36 @@ fn mach_vm_region(
         count,
         filename,
     })
+}
+
+/// Returns the share mode (one of the `mach2::vm_region::SM_*` constants) for the region that
+/// starts at `address`, or `None` if the extended region info could not be retrieved. This mirrors
+/// the `SM=` column shown by `vmmap` and lets us tell anonymous regions (`SM_EMPTY`) apart from
+/// file-backed ones.
+fn mach_vm_region_share_mode(
+    target_task: mach_port_name_t,
+    address: mach_vm_address_t,
+) -> Option<u8> {
+    let mut address = address;
+    let mut size = unsafe { mem::zeroed::<mach_vm_size_t>() };
+    let mut object_name: mach_port_t = 0;
+    let mut count = vm_region_extended_info::count();
+    let mut info = unsafe { mem::zeroed::<vm_region_extended_info_data_t>() };
+    let result = unsafe {
+        mach2::vm::mach_vm_region(
+            target_task as vm_task_entry_t,
+            &mut address,
+            &mut size,
+            VM_REGION_EXTENDED_INFO,
+            &mut info as *mut vm_region_extended_info_data_t as vm_region_info_t,
+            &mut count,
+            &mut object_name,
+        )
+    };
+    if result != KERN_SUCCESS {
+        return None;
+    }
+    Some(info.share_mode)
 }
 
 pub fn task_for_pid(pid: Pid) -> io::Result<mach_port_name_t> {
