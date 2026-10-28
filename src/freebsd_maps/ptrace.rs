@@ -157,17 +157,25 @@ pub fn attach(pid: Pid) -> io::Result<()> {
     }
 
     let mut wait_status = 0;
-
-    let stopped = unsafe {
-        waitpid(pid, &mut wait_status as *mut _, 0);
-        WIFSTOPPED(wait_status)
-    };
-
-    if !stopped {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
+    loop {
+        if unsafe { waitpid(pid, &mut wait_status, 0) } != -1 {
+            break;
+        }
+        let err = io::Error::last_os_error();
+        if err.kind() != io::ErrorKind::Interrupted {
+            // Don't leave the process attached (and possibly stopped) if we can't use it
+            let _ = detach(pid);
+            return Err(err);
+        }
     }
+
+    if !WIFSTOPPED(wait_status) {
+        let _ = detach(pid);
+        return Err(io::Error::other(format!(
+            "process {pid} did not stop after PT_ATTACH (wait status {wait_status:#x})"
+        )));
+    }
+    Ok(())
 }
 
 /// Detach from the process `pid`.
