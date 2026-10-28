@@ -361,7 +361,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
             return Err(io::Error::last_os_error());
         }
 
-        let mut commands_buffer = vec![0_i8; header.sizeofcmds as usize];
+        let mut commands_buffer = vec![0_u8; header.sizeofcmds as usize];
         let mut read_len = mach_vm_size_t::from(header.sizeofcmds);
         let result = unsafe {
             vm_read_overwrite(
@@ -377,42 +377,64 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
             return Err(io::Error::last_os_error());
         }
 
-        // Figure out the slide from the __TEXT segment if appropiate
-        let mut offset: u32 = 0;
-        let mut slide: u64 = 0;
-        for _ in 0..header.ncmds {
-            unsafe {
-                let command = *(commands_buffer.as_ptr().offset(offset as isize)
-                    as *const segment_command_64);
-                // LC_SEGMENT_64 = 0x19 TODO
-                // find the __TEXT segment and compute the slide if appropiate
-                if command.cmd == 0x19 && command.segname[0..7] == [95, 95, 84, 69, 88, 84, 0] {
-                    slide = module.imageLoadAddress as u64 - command.vmaddr;
-                    break;
-                }
-                offset += command.cmdsize;
-            }
-        }
-
-        let mut offset: u32 = 0;
-        for _ in 0..header.ncmds {
-            unsafe {
-                let mut command = *(commands_buffer.as_ptr().offset(offset as isize)
-                    as *const segment_command_64);
-                if command.cmd == 0x19 {
-                    command.vmaddr += slide;
-                    vec.push(DyldInfo {
-                        filename: PathBuf::from(filename.clone()),
-                        address: module.imageLoadAddress as usize,
-                        file_mod_date: module.imageFileModDate,
-                        segment: command,
-                    });
-                }
-                offset += command.cmdsize;
-            }
+        let segments = parse_segments(
+            &commands_buffer,
+            header.ncmds,
+            module.imageLoadAddress as u64,
+        );
+        for segment in segments {
+            vec.push(DyldInfo {
+                filename: PathBuf::from(filename.clone()),
+                address: module.imageLoadAddress as usize,
+                file_mod_date: module.imageFileModDate,
+                segment,
+            });
         }
     }
     Ok(vec)
+}
+
+const LC_SEGMENT_64: u32 = 0x19;
+const LOAD_COMMAND_HEADER_SIZE: usize = 2 * mem::size_of::<u32>();
+
+/// Returns the `LC_SEGMENT_64` load commands in `commands`, with each segment's `vmaddr` adjusted
+/// by the slide computed from the `__TEXT` segment. `commands` holds data read from another
+/// process, so we treat it as untrusted.
+fn parse_segments(commands: &[u8], ncmds: u32, load_address: u64) -> Vec<segment_command_64> {
+    let mut segments = Vec::new();
+    let mut offset: usize = 0;
+    for _ in 0..ncmds {
+        let header = match commands.get(offset..offset + LOAD_COMMAND_HEADER_SIZE) {
+            Some(h) => h,
+            None => break,
+        };
+        let cmd = u32::from_ne_bytes([header[0], header[1], header[2], header[3]]);
+        let cmdsize = u32::from_ne_bytes([header[4], header[5], header[6], header[7]]) as usize;
+        if cmdsize < LOAD_COMMAND_HEADER_SIZE || commands.len() - offset < cmdsize {
+            break;
+        }
+
+        if cmd == LC_SEGMENT_64 && cmdsize >= mem::size_of::<segment_command_64>() {
+            // The buffer has no alignment guarantees, so the segment must be read unaligned.
+            // Safety: the bounds checks above ensure that `size_of::<segment_command_64>()`
+            // bytes are available at `offset`, and the struct is plain old data.
+            let segment = unsafe {
+                std::ptr::read_unaligned(commands.as_ptr().add(offset) as *const segment_command_64)
+            };
+            segments.push(segment);
+        }
+        offset += cmdsize;
+    }
+
+    // Figure out the slide from the __TEXT segment if appropriate
+    let slide = segments
+        .iter()
+        .find(|s| s.segname[0..7] == [95, 95, 84, 69, 88, 84, 0])
+        .map_or(0, |s| load_address.wrapping_sub(s.vmaddr));
+    for segment in &mut segments {
+        segment.vmaddr = segment.vmaddr.wrapping_add(slide);
+    }
+    segments
 }
 
 extern "C" {
@@ -423,4 +445,101 @@ extern "C" {
         data: mach_vm_address_t,
         out_size: *mut mach_vm_size_t,
     ) -> kern_return_t;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn segment_bytes(segname: &[u8], vmaddr: u64) -> Vec<u8> {
+        let mut segment = segment_command_64 {
+            cmd: LC_SEGMENT_64,
+            cmdsize: mem::size_of::<segment_command_64>() as u32,
+            vmaddr,
+            ..Default::default()
+        };
+        for (dst, src) in segment.segname.iter_mut().zip(segname) {
+            *dst = *src as _;
+        }
+        let ptr = &segment as *const segment_command_64 as *const u8;
+        unsafe { std::slice::from_raw_parts(ptr, mem::size_of::<segment_command_64>()) }.to_vec()
+    }
+
+    fn load_command_bytes(cmd: u32, cmdsize: u32) -> Vec<u8> {
+        let mut bytes = cmd.to_ne_bytes().to_vec();
+        bytes.extend_from_slice(&cmdsize.to_ne_bytes());
+        bytes.resize(cmdsize.max(8) as usize, 0);
+        bytes
+    }
+
+    #[test]
+    fn test_get_dyld_info_for_current_process() {
+        let infos = get_dyld_info(std::process::id() as Pid).unwrap();
+        let text = infos
+            .iter()
+            .find(|info| {
+                info.filename.to_string_lossy().contains("libSystem")
+                    && info.segment.segname[0..7] == [95, 95, 84, 69, 88, 84, 0]
+            })
+            .expect("libSystem should have a __TEXT segment");
+        assert_eq!(text.segment.vmaddr, text.address as u64);
+    }
+
+    #[test]
+    fn test_parse_segments_applies_slide() {
+        let mut commands = segment_bytes(b"__PAGEZERO", 0);
+        commands.extend(load_command_bytes(0x2, 24)); // LC_SYMTAB
+        commands.extend(segment_bytes(b"__TEXT", 0x1000));
+        commands.extend(segment_bytes(b"__DATA", 0x5000));
+
+        let segments = parse_segments(&commands, 4, 0x10_1000);
+        let vmaddrs: Vec<u64> = segments.iter().map(|s| s.vmaddr).collect();
+        assert_eq!(vmaddrs, vec![0x10_0000, 0x10_1000, 0x10_5000]);
+    }
+
+    #[test]
+    fn test_parse_segments_handles_unaligned_commands() {
+        // A 4-byte-aligned load command leaves the following segment misaligned for u64 fields.
+        let mut commands = load_command_bytes(0x2, 12);
+        commands.extend(segment_bytes(b"__TEXT", 0x1000));
+
+        let segments = parse_segments(&commands, 2, 0x1000);
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].vmaddr, 0x1000);
+    }
+
+    #[test]
+    fn test_parse_segments_stops_at_malformed_commands() {
+        let text = segment_bytes(b"__TEXT", 0x1000);
+
+        // ncmds claims more commands than the buffer holds
+        assert_eq!(parse_segments(&text, 100, 0x1000).len(), 1);
+
+        // Truncated segment command
+        assert!(parse_segments(&text[..text.len() - 1], 1, 0x1000).is_empty());
+
+        // Too short for even a load command header
+        assert!(parse_segments(&text[..4], 1, 0x1000).is_empty());
+
+        // cmdsize of zero would otherwise never advance
+        let mut commands = load_command_bytes(0x2, 0);
+        commands.extend(&text);
+        assert!(parse_segments(&commands, 2, 0x1000).is_empty());
+
+        // cmdsize past the end of the buffer
+        let mut commands = text.clone();
+        commands.extend(load_command_bytes(0x2, 8));
+        commands[text.len() + 4..text.len() + 8].copy_from_slice(&u32::MAX.to_ne_bytes());
+        assert_eq!(parse_segments(&commands, 2, 0x1000).len(), 1);
+
+        // LC_SEGMENT_64 whose cmdsize is too small for a segment_command_64
+        assert!(parse_segments(&load_command_bytes(LC_SEGMENT_64, 16), 1, 0x1000).is_empty());
+    }
+
+    #[test]
+    fn test_parse_segments_slide_does_not_overflow() {
+        let commands = segment_bytes(b"__TEXT", u64::MAX);
+        let segments = parse_segments(&commands, 1, 0x1000);
+        assert_eq!(segments[0].vmaddr, 0x1000);
+    }
 }
