@@ -2,7 +2,7 @@ use anyhow::Error;
 use libc::{c_int, pid_t};
 use libproc::libproc::proc_pid::regionfilename;
 use mach2;
-use mach2::kern_return::{kern_return_t, KERN_SUCCESS};
+use mach2::kern_return::{kern_return_t, KERN_INVALID_ADDRESS, KERN_SUCCESS};
 use mach2::mach_types::vm_task_entry_t;
 use mach2::message::mach_msg_type_number_t;
 use mach2::port::{mach_port_name_t, mach_port_t, MACH_PORT_NULL};
@@ -114,29 +114,20 @@ impl MapRange {
 pub fn get_process_maps(pid: Pid) -> io::Result<Vec<MapRange>> {
     let task_port = TaskPort::for_pid(pid)?;
     let task = task_port.0;
-    let init_region = match mach_vm_region(pid, task, 1) {
-        Some(r) => r,
-        None => return Ok(vec![]),
-    };
-    let mut vec = vec![];
-    let mut region = init_region.clone();
-    vec.push(init_region);
-    loop {
-        match mach_vm_region(pid, task, region.end()) {
-            Some(r) => {
-                vec.push(r.clone());
-                region = r;
-            }
-            _ => return Ok(vec),
-        }
+    let mut vec: Vec<MapRange> = vec![];
+    let mut address = 1;
+    while let Some(region) = mach_vm_region(pid, task, address)? {
+        address = region.end();
+        vec.push(region);
     }
+    Ok(vec)
 }
 
 fn mach_vm_region(
     pid: Pid,
     target_task: mach_port_name_t,
     mut address: mach_vm_address_t,
-) -> Option<MapRange> {
+) -> io::Result<Option<MapRange>> {
     let mut count = mem::size_of::<vm_region_basic_info_data_64_t>() as mach_msg_type_number_t;
     let mut object_name: mach_port_t = 0;
     let mut size = unsafe { mem::zeroed::<mach_vm_size_t>() };
@@ -152,8 +143,11 @@ fn mach_vm_region(
             &mut object_name,
         )
     };
-    if result != KERN_SUCCESS {
-        return None;
+    match result {
+        KERN_SUCCESS => {}
+        // There are no more regions at or after `address`
+        KERN_INVALID_ADDRESS => return Ok(None),
+        _ => return Err(mach_error("mach_vm_region", result)),
     }
     // `proc_regionfilename` (via `regionfilename`) is unreliable for anonymous regions. For an
     // address that falls in a region with no backing file it often succeeds and returns the path of
@@ -169,13 +163,13 @@ fn mach_vm_region(
             _ => None,
         }
     };
-    Some(MapRange {
+    Ok(Some(MapRange {
         size,
         info,
         start: address,
         count,
         filename,
-    })
+    }))
 }
 
 /// Returns the share mode (one of the `mach2::vm_region::SM_*` constants) for the region that
@@ -244,15 +238,28 @@ impl Drop for TaskPort {
     }
 }
 
-fn task_for_pid_error(pid: Pid, result: kern_return_t) -> io::Error {
-    let mach_error = unsafe {
+fn mach_error_string(result: kern_return_t) -> String {
+    unsafe {
         let error = libc::mach_error_string(result);
         if error.is_null() {
             "unknown Mach error".to_string()
         } else {
             CStr::from_ptr(error).to_string_lossy().into_owned()
         }
-    };
+    }
+}
+
+/// Builds an error for a failed Mach call. Mach calls return a `kern_return_t` rather than
+/// setting errno, so `io::Error::last_os_error` would describe an unrelated error.
+fn mach_error(call: &str, result: kern_return_t) -> io::Error {
+    io::Error::other(format!(
+        "{call} failed: {} ({result})",
+        mach_error_string(result)
+    ))
+}
+
+fn task_for_pid_error(pid: Pid, result: kern_return_t) -> io::Error {
+    let mach_error = mach_error_string(result);
     io::Error::new(
         io::ErrorKind::PermissionDenied,
         format!(
@@ -673,6 +680,14 @@ mod tests {
             after < before + ITERATIONS,
             "task port references grew from {before} to {after}"
         );
+    }
+
+    #[test]
+    fn test_mach_vm_region_reports_errors() {
+        // A real failure, unlike reaching the end of the address space, must not look like an
+        // empty region list
+        let pid = std::process::id() as Pid;
+        assert!(mach_vm_region(pid, MACH_PORT_NULL, 1).is_err());
     }
 
     #[test]
