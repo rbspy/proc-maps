@@ -262,6 +262,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
     use mach2::task_info::{task_info_t, TASK_DYLD_INFO};
 
     let mut vec = Vec::new();
+    let mut budget = DyldResourceBudget::default();
     let task = task_for_pid(pid)?;
 
     // Note: this seems to require macOS MAC_OS_X_VERSION_10_6 or greater
@@ -308,6 +309,12 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
     }
 
     // copy the infoArray element of dyld_all_image_infos over
+    if image_infos.infoArrayCount > MAX_DYLD_IMAGE_COUNT {
+        return Err(invalid_data(format!(
+            "dyld reported {} images, which exceeds the limit of {MAX_DYLD_IMAGE_COUNT}",
+            image_infos.infoArrayCount
+        )));
+    }
     let mut modules = vec![dyld_image_info::default(); image_infos.infoArrayCount as usize];
     let mut read_len = (std::mem::size_of::<dyld_image_info>()
         * image_infos.infoArrayCount as usize) as mach_vm_size_t;
@@ -361,13 +368,23 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
             return Err(io::Error::last_os_error());
         }
 
+        if header.sizeofcmds > MAX_SIZEOFCMDS {
+            return Err(invalid_data(format!(
+                "image at {:#x} has {} bytes of load commands, which exceeds the limit of \
+                 {MAX_SIZEOFCMDS}",
+                module.imageLoadAddress as usize, header.sizeofcmds
+            )));
+        }
+        budget.add_load_command_bytes(header.sizeofcmds as usize)?;
+        let commands_address = (module.imageLoadAddress as mach_vm_address_t)
+            .checked_add(std::mem::size_of_val(&header) as mach_vm_address_t)
+            .ok_or_else(|| invalid_data("image load address overflows".to_string()))?;
         let mut commands_buffer = vec![0_u8; header.sizeofcmds as usize];
         let mut read_len = mach_vm_size_t::from(header.sizeofcmds);
         let result = unsafe {
             vm_read_overwrite(
                 task,
-                (module.imageLoadAddress as usize + std::mem::size_of_val(&header))
-                    as mach_vm_size_t,
+                commands_address,
                 read_len,
                 commands_buffer.as_mut_ptr() as mach_vm_address_t,
                 &mut read_len,
@@ -377,11 +394,14 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
             return Err(io::Error::last_os_error());
         }
 
+        commands_buffer.truncate(read_len as usize);
+
         let segments = parse_segments(
             &commands_buffer,
             header.ncmds,
             module.imageLoadAddress as u64,
         );
+        budget.add_segments(segments.len())?;
         for segment in segments {
             vec.push(DyldInfo {
                 filename: filename.clone(),
@@ -392,6 +412,62 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         }
     }
     Ok(vec)
+}
+
+/// Upper bound on the number of images we'll accept from a target's `dyld_all_image_infos`.
+/// Real processes load a few thousand at most; this guards against huge allocations driven by a
+/// corrupt or hostile target.
+const MAX_DYLD_IMAGE_COUNT: u32 = 1 << 16;
+
+/// Upper bound on the size of an image's load commands, for the same reason.
+const MAX_SIZEOFCMDS: u32 = 16 * 1024 * 1024;
+
+/// Aggregate bounds prevent a target from multiplying the generous per-image limits into
+/// excessive work or output allocations by reporting many images with large command buffers.
+const MAX_TOTAL_SIZEOFCMDS: usize = 256 * 1024 * 1024;
+const MAX_DYLD_SEGMENT_COUNT: usize = 1 << 17;
+
+#[derive(Default)]
+struct DyldResourceBudget {
+    load_command_bytes: usize,
+    segment_count: usize,
+}
+
+impl DyldResourceBudget {
+    fn add_load_command_bytes(&mut self, amount: usize) -> io::Result<()> {
+        add_to_budget(
+            &mut self.load_command_bytes,
+            amount,
+            MAX_TOTAL_SIZEOFCMDS,
+            "dyld load command bytes",
+        )
+    }
+
+    fn add_segments(&mut self, amount: usize) -> io::Result<()> {
+        add_to_budget(
+            &mut self.segment_count,
+            amount,
+            MAX_DYLD_SEGMENT_COUNT,
+            "dyld segments",
+        )
+    }
+}
+
+fn add_to_budget(total: &mut usize, amount: usize, limit: usize, resource: &str) -> io::Result<()> {
+    let new_total = total
+        .checked_add(amount)
+        .ok_or_else(|| invalid_data(format!("total {resource} overflowed")))?;
+    if new_total > limit {
+        return Err(invalid_data(format!(
+            "total {resource} ({new_total}) exceeds the limit of {limit}"
+        )));
+    }
+    *total = new_total;
+    Ok(())
+}
+
+fn invalid_data(message: String) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
 /// Converts a buffer holding a NUL-terminated path into a `PathBuf`. The buffer is read from
@@ -490,6 +566,33 @@ mod tests {
             })
             .expect("libSystem should have a __TEXT segment");
         assert_eq!(text.segment.vmaddr, text.address as u64);
+    }
+
+    #[test]
+    fn test_dyld_resource_budget() {
+        let mut budget = DyldResourceBudget::default();
+        budget.add_load_command_bytes(MAX_TOTAL_SIZEOFCMDS).unwrap();
+        assert_eq!(
+            budget.add_load_command_bytes(1).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+
+        budget.add_segments(MAX_DYLD_SEGMENT_COUNT).unwrap();
+        assert_eq!(
+            budget.add_segments(1).unwrap_err().kind(),
+            io::ErrorKind::InvalidData
+        );
+    }
+
+    #[test]
+    fn test_resource_budget_rejects_overflow() {
+        let mut total = usize::MAX;
+        assert_eq!(
+            add_to_budget(&mut total, 1, usize::MAX, "test resource")
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidData
+        );
     }
 
     #[test]
