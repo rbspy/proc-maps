@@ -1,7 +1,9 @@
 use libc;
 use std;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::Read;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use crate::MapRangeImpl;
@@ -58,18 +60,22 @@ pub fn get_process_maps(pid: Pid) -> std::io::Result<Vec<MapRange>> {
         return Err(std::io::Error::from_raw_os_error(libc::EFBIG));
     }
 
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
+    // Pathnames are arbitrary bytes, so the file isn't necessarily valid UTF-8
+    let mut contents = Vec::new();
+    file.read_to_end(&mut contents)?;
     parse_proc_maps(&contents)
 }
 
-fn parse_proc_maps(contents: &str) -> std::io::Result<Vec<MapRange>> {
+fn parse_proc_maps(contents: &[u8]) -> std::io::Result<Vec<MapRange>> {
     let mut vec: Vec<MapRange> = Vec::new();
-    for line in contents.split("\n") {
+    for line in contents.split(|&b| b == b'\n') {
         let mut split = Fields { rest: line };
         let range = match split.next() {
             None => break,
-            Some(s) => s,
+            Some(s) => match std::str::from_utf8(s) {
+                Err(_) => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
+                Ok(s) => s,
+            },
         };
 
         let mut range_split = range.split("-");
@@ -91,12 +97,12 @@ fn parse_proc_maps(contents: &str) -> std::io::Result<Vec<MapRange>> {
             return Err(std::io::Error::from_raw_os_error(libc::EINVAL));
         }
 
-        let flags = match split.next() {
+        let flags = match split.next_str() {
             None => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
             Some(s) if s.len() < 3 => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
             Some(s) => s.to_string(),
         };
-        let offset = match split.next() {
+        let offset = match split.next_str() {
             None => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
             Some(s) => match usize::from_str_radix(s, 16) {
                 Err(_) => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
@@ -107,11 +113,11 @@ fn parse_proc_maps(contents: &str) -> std::io::Result<Vec<MapRange>> {
                 Ok(i) => i,
             },
         };
-        let dev = match split.next() {
+        let dev = match split.next_str() {
             None => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
             Some(s) => s.to_string(),
         };
-        let inode = match split.next() {
+        let inode = match split.next_str() {
             None => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
             Some(s) => match usize::from_str_radix(s, 10) {
                 Err(_) => return Err(std::io::Error::from_raw_os_error(libc::EINVAL)),
@@ -121,7 +127,7 @@ fn parse_proc_maps(contents: &str) -> std::io::Result<Vec<MapRange>> {
         // The pathname is the rest of the line, which may itself contain whitespace
         let pathname = Some(split.remainder())
             .filter(|s| !s.is_empty())
-            .map(PathBuf::from);
+            .map(|s| PathBuf::from(OsStr::from_bytes(s)));
 
         vec.push(MapRange {
             range_start,
@@ -139,26 +145,34 @@ fn parse_proc_maps(contents: &str) -> std::io::Result<Vec<MapRange>> {
 /// Iterates over the whitespace-separated fields of a line, while allowing access to the
 /// unparsed rest of the line.
 struct Fields<'a> {
-    rest: &'a str,
+    rest: &'a [u8],
 }
 
 impl<'a> Fields<'a> {
+    /// Returns the next field as a `&str`, or `None` if it is missing or isn't valid UTF-8.
+    fn next_str(&mut self) -> Option<&'a str> {
+        self.next().and_then(|s| std::str::from_utf8(s).ok())
+    }
+
     /// Returns the rest of the line after the fields consumed so far, minus leading whitespace.
-    fn remainder(self) -> &'a str {
-        self.rest.trim_start()
+    fn remainder(self) -> &'a [u8] {
+        self.rest.trim_ascii_start()
     }
 }
 
 impl<'a> Iterator for Fields<'a> {
-    type Item = &'a str;
+    type Item = &'a [u8];
 
-    fn next(&mut self) -> Option<&'a str> {
-        let rest = self.rest.trim_start();
+    fn next(&mut self) -> Option<&'a [u8]> {
+        let rest = self.rest.trim_ascii_start();
         if rest.is_empty() {
             self.rest = rest;
             return None;
         }
-        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let end = rest
+            .iter()
+            .position(u8::is_ascii_whitespace)
+            .unwrap_or(rest.len());
         let (field, rest) = rest.split_at(end);
         self.rest = rest;
         Some(field)
@@ -169,7 +183,7 @@ impl<'a> Iterator for Fields<'a> {
 fn test_parse_maps_preserves_whitespace_in_pathnames() {
     let contents = "7f0000000000-7f0000001000 r--p 00000000 fd:01 1234                       /tmp/two  spaces\tand tab\n\
                     7f0000001000-7f0000002000 r--p 00000000 fd:01 1235                       /tmp/trailing \n";
-    let maps = parse_proc_maps(contents).unwrap();
+    let maps = parse_proc_maps(contents.as_bytes()).unwrap();
     assert_eq!(
         maps[0].pathname,
         Some(PathBuf::from("/tmp/two  spaces\tand tab"))
@@ -178,8 +192,21 @@ fn test_parse_maps_preserves_whitespace_in_pathnames() {
 }
 
 #[test]
+fn test_parse_maps_accepts_non_utf8_pathnames() {
+    let contents = b"7f0000000000-7f0000001000 r--p 00000000 fd:01 1234   /tmp/caf\xe9.so\n";
+    let maps = parse_proc_maps(contents).unwrap();
+    assert_eq!(
+        maps[0]
+            .pathname
+            .as_deref()
+            .map(|p| p.as_os_str().as_bytes()),
+        Some(&b"/tmp/caf\xe9.so"[..])
+    );
+}
+
+#[test]
 fn test_parse_maps() {
-    let contents = include_str!("../ci/testdata/map.txt");
+    let contents = include_bytes!("../ci/testdata/map.txt");
     let vec = parse_proc_maps(contents).unwrap();
     let expected = vec![
         MapRange {
