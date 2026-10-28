@@ -2,13 +2,16 @@ use std;
 use std::ffi::{OsStr, OsString};
 use std::io;
 use std::os::windows::ffi::{OsStrExt, OsStringExt};
+use std::os::windows::io::{
+    AsRawHandle, HandleOrInvalid, HandleOrNull, IntoRawHandle, OwnedHandle,
+};
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use winapi::shared::minwindef::{DWORD, FALSE};
 use winapi::um::dbghelp::{
     SymCleanup, SymFromNameW, SymInitializeW, SymLoadModuleExW, SymUnloadModule64, SYMBOL_INFOW,
 };
-use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
+use winapi::um::handleapi::CloseHandle;
 use winapi::um::memoryapi::VirtualQueryEx;
 use winapi::um::processthreadsapi::OpenProcess;
 use winapi::um::sysinfoapi::{GetSystemInfo, SYSTEM_INFO};
@@ -111,10 +114,10 @@ impl Module {
 /// Uses the Tool Help API to list all modules.
 fn get_process_modules(pid: Pid) -> io::Result<Vec<Module>> {
     unsafe {
-        let handle = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
-        if handle == INVALID_HANDLE_VALUE {
-            return Err(io::Error::last_os_error());
-        }
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+        let snapshot = OwnedHandle::try_from(HandleOrInvalid::from_raw_handle(snapshot.cast()))
+            .map_err(|_| io::Error::last_os_error())?;
+        let handle: HANDLE = snapshot.as_raw_handle().cast();
 
         let mut module = MODULEENTRY32W {
             ..Default::default()
@@ -123,7 +126,6 @@ fn get_process_modules(pid: Pid) -> io::Result<Vec<Module>> {
 
         let mut success = Module32FirstW(handle, &mut module);
         if success == 0 {
-            CloseHandle(handle);
             return Err(io::Error::last_os_error());
         }
 
@@ -137,7 +139,6 @@ fn get_process_modules(pid: Pid) -> io::Result<Vec<Module>> {
 
             success = Module32NextW(handle, &mut module);
         }
-        CloseHandle(handle);
         Ok(vec)
     }
 }
@@ -162,10 +163,8 @@ fn get_process_page_ranges(pid: Pid) -> io::Result<Vec<PageRange>> {
 
         let mut vec = Vec::new();
 
-        let process = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid as DWORD);
-        if process == INVALID_HANDLE_VALUE {
-            return Err(io::Error::last_os_error());
-        }
+        let process_handle = open_process(PROCESS_QUERY_INFORMATION, pid)?;
+        let process: HANDLE = process_handle.as_raw_handle().cast();
 
         let mut meminfo = MEMORY_BASIC_INFORMATION {
             ..Default::default()
@@ -176,7 +175,6 @@ fn get_process_page_ranges(pid: Pid) -> io::Result<Vec<PageRange>> {
         while address < sysinfo.lpMaximumApplicationAddress {
             let bytes_returned = VirtualQueryEx(process, address, &mut meminfo, buffer_size);
             if bytes_returned != buffer_size {
-                CloseHandle(process);
                 return Err(io::Error::last_os_error());
             }
 
@@ -209,9 +207,16 @@ fn get_process_page_ranges(pid: Pid) -> io::Result<Vec<PageRange>> {
                 .cast(); // as winapi::um::winnt::PVOID;
         }
 
-        CloseHandle(process);
         Ok(vec)
     }
+}
+
+/// Opens a handle to process `pid`, which is closed when the returned `OwnedHandle` is dropped.
+fn open_process(access: DWORD, pid: Pid) -> io::Result<OwnedHandle> {
+    // OpenProcess returns NULL, not INVALID_HANDLE_VALUE, on failure
+    let process = unsafe { OpenProcess(access, FALSE, pid as DWORD) };
+    unsafe { OwnedHandle::try_from(HandleOrNull::from_raw_handle(process.cast())) }
+        .map_err(|_| io::Error::last_os_error())
 }
 
 // The rest of this code is utilities for loading windows symbols.
@@ -230,16 +235,13 @@ pub struct SymbolModule<'a> {
 
 impl SymbolLoader {
     pub fn new(pid: Pid) -> io::Result<Self> {
-        unsafe {
-            let process = OpenProcess(PROCESS_VM_READ, FALSE, pid as DWORD);
-            if process == INVALID_HANDLE_VALUE {
-                return Err(io::Error::last_os_error());
-            }
-            if SymInitializeW(process, null_mut(), FALSE) == 0 {
-                return Err(io::Error::last_os_error());
-            }
-            Ok(Self { process })
+        let process = open_process(PROCESS_VM_READ, pid)?;
+        if unsafe { SymInitializeW(process.as_raw_handle().cast(), null_mut(), FALSE) } == 0 {
+            return Err(io::Error::last_os_error());
         }
+        Ok(Self {
+            process: process.into_raw_handle().cast(),
+        })
     }
 
     pub fn address_from_name(&self, name: &str) -> io::Result<(u64, u64)> {
