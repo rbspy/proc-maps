@@ -105,23 +105,21 @@ impl Iterator for VmEntryIterator {
 
     fn next(&mut self) -> Option<Self::Item> {
         let Self { current, pid } = *self;
-        // If the region was mapped from a file, `pve_path` contains filename.
-        let pve_pathlen = 4096;
-        let pve_path: [c_char; FILE_NAME_BUFFER_LENGTH] = [0; FILE_NAME_BUFFER_LENGTH];
+        // If the region was mapped from a file, the kernel writes its filename to `pve_path`.
+        let mut pve_path: [c_char; FILE_NAME_BUFFER_LENGTH] = [0; FILE_NAME_BUFFER_LENGTH];
 
-        let entry = ptrace_vm_entry {
+        let mut entry = ptrace_vm_entry {
             pve_entry: current,
-            pve_path: &pve_path as *const _ as *mut _,
-            pve_pathlen: pve_pathlen,
+            pve_path: pve_path.as_mut_ptr(),
+            pve_pathlen: FILE_NAME_BUFFER_LENGTH as _,
             ..Default::default()
         };
 
-        let result = read_vm_entry(pid, entry);
-
-        match result {
-            Ok(entry) => {
+        match read_vm_entry(pid, &mut entry) {
+            Ok(()) => {
                 self.current = entry.pve_entry;
 
+                // `entry.pve_path` points into `pve_path`, so convert while it's still alive
                 Some(entry.into())
             }
             _ => None,
@@ -183,13 +181,14 @@ pub fn detach(pid: Pid) -> io::Result<()> {
     }
 }
 
-/// Read virtual memory entry
-pub fn read_vm_entry(pid: Pid, vm_entry: ptrace_vm_entry) -> io::Result<ptrace_vm_entry> {
-    let result = unsafe { ptrace(PT_VM_ENTRY, pid, &vm_entry as *const _ as *mut c_char, 0) };
+/// Read virtual memory entry. The kernel updates `vm_entry` in place.
+pub fn read_vm_entry(pid: Pid, vm_entry: &mut ptrace_vm_entry) -> io::Result<()> {
+    let vm_entry: *mut ptrace_vm_entry = vm_entry;
+    let result = unsafe { ptrace(PT_VM_ENTRY, pid, vm_entry.cast(), 0) };
 
     if result == -1 {
         Err(io::Error::last_os_error())
     } else {
-        Ok(vm_entry)
+        Ok(())
     }
 }
