@@ -35,8 +35,8 @@ jobs:
         build:
         - linux-x86_64
         - linux-aarch64
-        - macos-15-intel
-        - macos-15-arm
+        - macos-26-intel
+        - macos-26
         - windows
         include:
         - build: linux-x86_64
@@ -47,16 +47,16 @@ jobs:
           os: ubuntu-24.04-arm
           run-tests: 'true'
           target: aarch64-unknown-linux-gnu
-        - build: macos-15-intel
-          os: macos-15-intel
+        - build: macos-26-intel
+          os: macos-26-intel
           run-tests: 'true'
           target: x86_64-apple-darwin
-        - build: macos-15-arm
-          os: macos-15
+        - build: macos-26
+          os: macos-26
           run-tests: 'true'
           target: aarch64-apple-darwin
         - build: windows
-          os: windows-2022
+          os: windows-2025
           run-tests: 'true'
           target: x86_64-pc-windows-msvc
     steps:
