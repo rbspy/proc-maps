@@ -1,5 +1,5 @@
 use anyhow::Error;
-use libc::{c_int, pid_t, strlen};
+use libc::{c_int, pid_t};
 use libproc::libproc::proc_pid::regionfilename;
 use mach2;
 use mach2::kern_return::{kern_return_t, KERN_SUCCESS};
@@ -12,9 +12,10 @@ use mach2::vm_region::{
 };
 use mach2::vm_types::{mach_vm_address_t, mach_vm_size_t};
 use std;
-use std::ffi::CStr;
+use std::ffi::{CStr, OsStr};
 use std::io;
 use std::mem;
+use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use crate::MapRangeImpl;
@@ -325,7 +326,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
 
     for module in modules {
         let mut read_len = 512_u64;
-        let mut image_filename = [0_i8; 512];
+        let mut image_filename = [0_u8; 512];
         let result = unsafe {
             vm_read_overwrite(
                 task,
@@ -339,9 +340,8 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
             return Err(io::Error::last_os_error());
         }
 
-        let ptr = image_filename.as_ptr();
-        let slice = unsafe { std::slice::from_raw_parts(ptr as *mut u8, strlen(ptr)) };
-        let filename = std::str::from_utf8(slice).unwrap().to_owned();
+        let filename =
+            path_from_c_buffer(&image_filename[..(read_len as usize).min(image_filename.len())]);
 
         // read in the mach header
         let mut header = mach_header_64::default();
@@ -384,7 +384,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         );
         for segment in segments {
             vec.push(DyldInfo {
-                filename: PathBuf::from(filename.clone()),
+                filename: filename.clone(),
                 address: module.imageLoadAddress as usize,
                 file_mod_date: module.imageFileModDate,
                 segment,
@@ -392,6 +392,13 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         }
     }
     Ok(vec)
+}
+
+/// Converts a buffer holding a NUL-terminated path into a `PathBuf`. The buffer is read from
+/// another process and might not contain a NUL, in which case the whole buffer is used.
+fn path_from_c_buffer(buffer: &[u8]) -> PathBuf {
+    let len = buffer.iter().position(|&b| b == 0).unwrap_or(buffer.len());
+    PathBuf::from(OsStr::from_bytes(&buffer[..len]))
 }
 
 const LC_SEGMENT_64: u32 = 0x19;
@@ -483,6 +490,25 @@ mod tests {
             })
             .expect("libSystem should have a __TEXT segment");
         assert_eq!(text.segment.vmaddr, text.address as u64);
+    }
+
+    #[test]
+    fn test_path_from_c_buffer() {
+        assert_eq!(
+            path_from_c_buffer(b"/usr/lib/a.dylib\0junk"),
+            Path::new("/usr/lib/a.dylib")
+        );
+        assert_eq!(
+            path_from_c_buffer(b"/no/terminator"),
+            Path::new("/no/terminator")
+        );
+        assert_eq!(path_from_c_buffer(b""), Path::new(""));
+        assert_eq!(
+            path_from_c_buffer(b"/bad/utf8/\xff\0")
+                .as_os_str()
+                .as_bytes(),
+            b"/bad/utf8/\xff"
+        );
     }
 
     #[test]
