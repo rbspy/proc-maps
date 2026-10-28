@@ -308,16 +308,16 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         / mem::size_of::<mach2::vm_types::natural_t>())
         as mach_msg_type_number_t;
     let mut count = TASK_DYLD_INFO_COUNT;
-    unsafe {
-        if task_info(
+    let result = unsafe {
+        task_info(
             task,
             TASK_DYLD_INFO,
             &mut dyld_info as *mut task_dyld_info as task_info_t,
             &mut count,
-        ) != KERN_SUCCESS
-        {
-            return Err(io::Error::last_os_error());
-        }
+        )
+    };
+    if result != KERN_SUCCESS {
+        return Err(mach_error("task_info", result));
     }
 
     // Read in the dyld_all_image_infos information here.
@@ -336,7 +336,10 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         )
     };
     if result != KERN_SUCCESS {
-        return Err(io::Error::last_os_error());
+        return Err(mach_error(
+            "vm_read_overwrite of dyld_all_image_infos",
+            result,
+        ));
     }
 
     // copy the infoArray element of dyld_all_image_infos over
@@ -359,7 +362,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
         )
     };
     if result != KERN_SUCCESS {
-        return Err(io::Error::last_os_error());
+        return Err(mach_error("vm_read_overwrite of dyld image list", result));
     }
 
     for module in modules {
@@ -375,7 +378,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
             )
         };
         if result != KERN_SUCCESS {
-            return Err(io::Error::last_os_error());
+            return Err(mach_error("vm_read_overwrite of image path", result));
         }
 
         let filename =
@@ -396,7 +399,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
             )
         };
         if result != KERN_SUCCESS {
-            return Err(io::Error::last_os_error());
+            return Err(mach_error("vm_read_overwrite of Mach-O header", result));
         }
 
         if header.sizeofcmds > MAX_SIZEOFCMDS {
@@ -422,7 +425,7 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
             )
         };
         if result != KERN_SUCCESS {
-            return Err(io::Error::last_os_error());
+            return Err(mach_error("vm_read_overwrite of load commands", result));
         }
 
         commands_buffer.truncate(read_len as usize);
