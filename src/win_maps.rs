@@ -9,7 +9,8 @@ use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use winapi::shared::minwindef::{DWORD, FALSE};
 use winapi::um::dbghelp::{
-    SymCleanup, SymFromNameW, SymInitializeW, SymLoadModuleExW, SymUnloadModule64, SYMBOL_INFOW,
+    SymCleanup, SymFromNameW, SymInitializeW, SymLoadModuleExW, SymUnloadModule64, MAX_SYM_NAME,
+    SYMBOL_INFOW,
 };
 use winapi::um::handleapi::CloseHandle;
 use winapi::um::memoryapi::VirtualQueryEx;
@@ -245,12 +246,15 @@ impl SymbolLoader {
     }
 
     pub fn address_from_name(&self, name: &str) -> io::Result<(u64, u64)> {
-        // Need to allocate extra space for the SYMBOL_INFO structure, otherwise segfaults
-        let size = std::mem::size_of::<SYMBOL_INFOW>() + 256;
-        let buffer = vec![0; size];
-        let info: *mut SYMBOL_INFOW = buffer.as_ptr() as *mut SYMBOL_INFOW;
+        // SYMBOL_INFOW ends with a variable-length name, so allocate room for MAX_SYM_NAME
+        // characters after it. Using u64 elements keeps the buffer aligned for the struct.
+        let size = std::mem::size_of::<SYMBOL_INFOW>() + MAX_SYM_NAME * std::mem::size_of::<u16>();
+        let mut buffer = vec![0_u64; size.div_ceil(std::mem::size_of::<u64>())];
+        let info: *mut SYMBOL_INFOW = buffer.as_mut_ptr().cast();
         unsafe {
-            (*info).SizeOfStruct = size as u32;
+            // SizeOfStruct must be the size of the fixed part of the struct, not of the buffer
+            (*info).SizeOfStruct = std::mem::size_of::<SYMBOL_INFOW>() as u32;
+            (*info).MaxNameLen = MAX_SYM_NAME as u32;
             if SymFromNameW(self.process, string_to_wstr(name).as_ptr(), info) == 0 {
                 return Err(std::io::Error::last_os_error());
             }
