@@ -55,7 +55,10 @@ fn parse_nm_output(output: &str) -> Vec<Symbol> {
                 name: split[1].to_string(),
             }
         } else if split.len() == 3 {
-            let value = usize::from_str_radix(split[0], 16).unwrap();
+            let value = match usize::from_str_radix(split[0], 16) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
             Symbol {
                 value: Some(value),
                 typ: split[1].to_string(),
@@ -566,6 +569,19 @@ mod tests {
             })
             .expect("libSystem should have a __TEXT segment");
         assert_eq!(text.segment.vmaddr, text.address as u64);
+    }
+
+    #[test]
+    fn test_parse_nm_output() {
+        let output = "                 U _malloc\n\
+                      0000000100003f50 T _main\n\
+                      not-hex T _bogus\n\
+                      \n";
+        let symbols = parse_nm_output(output);
+        let names: Vec<&str> = symbols.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["_malloc", "_main"]);
+        assert_eq!(symbols[0].value, None);
+        assert_eq!(symbols[1].value, Some(0x100003f50));
     }
 
     #[test]
