@@ -82,13 +82,18 @@ impl Default for VmEntry {
 pub struct VmEntryIterator {
     current: c_int,
     pid: Pid,
+    done: bool,
 }
 
 impl VmEntryIterator {
     pub fn new(pid: Pid) -> std::io::Result<Self> {
         attach(pid)?;
 
-        Ok(Self { current: 0, pid })
+        Ok(Self {
+            current: 0,
+            pid,
+            done: false,
+        })
     }
 }
 
@@ -101,10 +106,13 @@ impl Drop for VmEntryIterator {
 }
 
 impl Iterator for VmEntryIterator {
-    type Item = VmEntry;
+    type Item = io::Result<VmEntry>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let Self { current, pid } = *self;
+        if self.done {
+            return None;
+        }
+        let Self { current, pid, .. } = *self;
         // If the region was mapped from a file, the kernel writes its filename to `pve_path`.
         let mut pve_path: [c_char; FILE_NAME_BUFFER_LENGTH] = [0; FILE_NAME_BUFFER_LENGTH];
 
@@ -120,9 +128,17 @@ impl Iterator for VmEntryIterator {
                 self.current = entry.pve_entry;
 
                 // `entry.pve_path` points into `pve_path`, so convert while it's still alive
-                Some(entry.into())
+                Some(Ok(entry.into()))
             }
-            _ => None,
+            Err(err) => {
+                self.done = true;
+                // ENOENT means there are no more entries; anything else is a real failure
+                if err.raw_os_error() == Some(libc::ENOENT) {
+                    None
+                } else {
+                    Some(Err(err))
+                }
+            }
         }
     }
 }

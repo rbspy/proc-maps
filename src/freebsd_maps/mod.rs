@@ -60,7 +60,7 @@ impl From<ptrace::VmEntry> for MapRange {
 pub fn get_process_maps(pid: Pid) -> std::io::Result<Vec<MapRange>> {
     let iter = ptrace::VmEntryIterator::new(pid)?;
 
-    Ok(iter.map(MapRange::from).collect())
+    iter.map(|entry| entry.map(MapRange::from)).collect()
 }
 
 #[test]
