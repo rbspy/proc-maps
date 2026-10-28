@@ -52,18 +52,23 @@ impl MapRangeImpl for MapRange {
 pub fn get_process_maps(pid: Pid) -> std::io::Result<Vec<MapRange>> {
     // Parses /proc/PID/maps into a Vec<MapRange>
     let maps_file = format!("/proc/{}/maps", pid);
-    let mut file = File::open(maps_file)?;
+    let file = File::open(maps_file)?;
+    let contents = read_limited(file, MAX_MAPS_FILE_SIZE)?;
+    parse_proc_maps(&contents)
+}
 
-    // Check that the file is not too big
-    let metadata = file.metadata()?;
-    if metadata.len() > 0x10000000 {
-        return Err(std::io::Error::from_raw_os_error(libc::EFBIG));
-    }
+const MAX_MAPS_FILE_SIZE: u64 = 0x10000000;
 
+/// Reads all of `reader`, failing with `EFBIG` if it holds more than `limit` bytes. The size
+/// reported by metadata can't be used for this because files in /proc report a size of 0.
+fn read_limited(reader: impl Read, limit: u64) -> std::io::Result<Vec<u8>> {
     // Pathnames are arbitrary bytes, so the file isn't necessarily valid UTF-8
     let mut contents = Vec::new();
-    file.read_to_end(&mut contents)?;
-    parse_proc_maps(&contents)
+    reader.take(limit + 1).read_to_end(&mut contents)?;
+    if contents.len() as u64 > limit {
+        return Err(std::io::Error::from_raw_os_error(libc::EFBIG));
+    }
+    Ok(contents)
 }
 
 fn parse_proc_maps(contents: &[u8]) -> std::io::Result<Vec<MapRange>> {
@@ -201,6 +206,15 @@ fn test_parse_maps_accepts_non_utf8_pathnames() {
             .as_deref()
             .map(|p| p.as_os_str().as_bytes()),
         Some(&b"/tmp/caf\xe9.so"[..])
+    );
+}
+
+#[test]
+fn test_read_limited() {
+    assert_eq!(read_limited(&b"abcd"[..], 4).unwrap(), b"abcd");
+    assert_eq!(
+        read_limited(&b"abcde"[..], 4).unwrap_err().raw_os_error(),
+        Some(libc::EFBIG)
     );
 }
 
