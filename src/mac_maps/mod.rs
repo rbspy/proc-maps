@@ -112,7 +112,8 @@ impl MapRange {
  * memory map, etc.
  */
 pub fn get_process_maps(pid: Pid) -> io::Result<Vec<MapRange>> {
-    let task = task_for_pid(pid)?;
+    let task_port = TaskPort::for_pid(pid)?;
+    let task = task_port.0;
     let init_region = match mach_vm_region(pid, task, 1) {
         Some(r) => r,
         None => return Ok(vec![]),
@@ -207,6 +208,8 @@ fn mach_vm_region_share_mode(
     Some(info.share_mode)
 }
 
+/// Returns a send right to the task port for `pid`. The caller owns the right and should release
+/// it with `mach_port_deallocate` when it's no longer needed.
 pub fn task_for_pid(pid: Pid) -> io::Result<mach_port_name_t> {
     let mut task: mach_port_name_t = MACH_PORT_NULL;
     // sleep for 10ms to make sure we don't get into a race between `task_for_pid` and execing a new
@@ -222,6 +225,23 @@ pub fn task_for_pid(pid: Pid) -> io::Result<mach_port_name_t> {
     }
 
     Ok(task)
+}
+
+/// A task port send right that is released when dropped.
+struct TaskPort(mach_port_name_t);
+
+impl TaskPort {
+    fn for_pid(pid: Pid) -> io::Result<Self> {
+        task_for_pid(pid).map(TaskPort)
+    }
+}
+
+impl Drop for TaskPort {
+    fn drop(&mut self) {
+        unsafe {
+            mach2::mach_port::mach_port_deallocate(mach2::traps::mach_task_self(), self.0);
+        }
+    }
 }
 
 fn task_for_pid_error(pid: Pid, result: kern_return_t) -> io::Error {
@@ -266,7 +286,8 @@ pub fn get_dyld_info(pid: Pid) -> io::Result<Vec<DyldInfo>> {
 
     let mut vec = Vec::new();
     let mut budget = DyldResourceBudget::default();
-    let task = task_for_pid(pid)?;
+    let task_port = TaskPort::for_pid(pid)?;
+    let task = task_port.0;
 
     // Note: this seems to require macOS MAC_OS_X_VERSION_10_6 or greater
     // https://chromium.googlesource.com/breakpad/breakpad/+/master/src/client/mac/handler/dynamic_images.cc#388
@@ -608,6 +629,49 @@ mod tests {
                 .unwrap_err()
                 .kind(),
             io::ErrorKind::InvalidData
+        );
+    }
+
+    extern "C" {
+        fn mach_port_get_refs(
+            task: mach_port_name_t,
+            name: mach_port_name_t,
+            right: mach2::port::mach_port_right_t,
+            refs: *mut mach2::port::mach_port_urefs_t,
+        ) -> kern_return_t;
+    }
+
+    fn own_task_send_refs() -> mach2::port::mach_port_urefs_t {
+        let pid = std::process::id() as Pid;
+        let task = TaskPort::for_pid(pid).unwrap();
+        let mut refs = 0;
+        let result = unsafe {
+            mach_port_get_refs(
+                mach2::traps::mach_task_self(),
+                task.0,
+                mach2::port::MACH_PORT_RIGHT_SEND,
+                &mut refs,
+            )
+        };
+        assert_eq!(result, KERN_SUCCESS);
+        refs
+    }
+
+    #[test]
+    fn test_task_port_is_released() {
+        let pid = std::process::id() as Pid;
+        const ITERATIONS: u32 = 20;
+        let before = own_task_send_refs();
+        for _ in 0..ITERATIONS {
+            get_process_maps(pid).unwrap();
+            get_dyld_info(pid).unwrap();
+        }
+        let after = own_task_send_refs();
+        // Other tests running concurrently also take references to this task port, so allow a
+        // little slack. A leak would add two references per iteration.
+        assert!(
+            after < before + ITERATIONS,
+            "task port references grew from {before} to {after}"
         );
     }
 
