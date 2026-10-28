@@ -66,7 +66,7 @@ pub fn get_process_maps(pid: Pid) -> std::io::Result<Vec<MapRange>> {
 fn parse_proc_maps(contents: &str) -> std::io::Result<Vec<MapRange>> {
     let mut vec: Vec<MapRange> = Vec::new();
     for line in contents.split("\n") {
-        let mut split = line.split_whitespace();
+        let mut split = Fields { rest: line };
         let range = match split.next() {
             None => break,
             Some(s) => s,
@@ -118,11 +118,10 @@ fn parse_proc_maps(contents: &str) -> std::io::Result<Vec<MapRange>> {
                 Ok(i) => i,
             },
         };
-        let pathname = match Some(split.collect::<Vec<&str>>().join(" ")).filter(|x| !x.is_empty())
-        {
-            Some(s) => Some(PathBuf::from(s)),
-            None => None,
-        };
+        // The pathname is the rest of the line, which may itself contain whitespace
+        let pathname = Some(split.remainder())
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from);
 
         vec.push(MapRange {
             range_start,
@@ -135,6 +134,47 @@ fn parse_proc_maps(contents: &str) -> std::io::Result<Vec<MapRange>> {
         });
     }
     Ok(vec)
+}
+
+/// Iterates over the whitespace-separated fields of a line, while allowing access to the
+/// unparsed rest of the line.
+struct Fields<'a> {
+    rest: &'a str,
+}
+
+impl<'a> Fields<'a> {
+    /// Returns the rest of the line after the fields consumed so far, minus leading whitespace.
+    fn remainder(self) -> &'a str {
+        self.rest.trim_start()
+    }
+}
+
+impl<'a> Iterator for Fields<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<&'a str> {
+        let rest = self.rest.trim_start();
+        if rest.is_empty() {
+            self.rest = rest;
+            return None;
+        }
+        let end = rest.find(char::is_whitespace).unwrap_or(rest.len());
+        let (field, rest) = rest.split_at(end);
+        self.rest = rest;
+        Some(field)
+    }
+}
+
+#[test]
+fn test_parse_maps_preserves_whitespace_in_pathnames() {
+    let contents = "7f0000000000-7f0000001000 r--p 00000000 fd:01 1234                       /tmp/two  spaces\tand tab\n\
+                    7f0000001000-7f0000002000 r--p 00000000 fd:01 1235                       /tmp/trailing \n";
+    let maps = parse_proc_maps(contents).unwrap();
+    assert_eq!(
+        maps[0].pathname,
+        Some(PathBuf::from("/tmp/two  spaces\tand tab"))
+    );
+    assert_eq!(maps[1].pathname, Some(PathBuf::from("/tmp/trailing ")));
 }
 
 #[test]
