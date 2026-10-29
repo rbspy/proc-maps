@@ -158,7 +158,7 @@ mod tests {
 
     #[cfg(not(target_os = "freebsd"))]
     #[test]
-    fn test_map_from_test_binary_present() -> () {
+    fn test_map_from_test_binary_present() {
         let maps = get_process_maps(std::process::id() as Pid).unwrap();
 
         let region = maps.iter().find(|map| {
@@ -177,7 +177,7 @@ mod tests {
 
     #[cfg(not(target_os = "windows"))]
     #[test]
-    fn test_map_from_invoked_binary_present() -> () {
+    fn test_map_from_invoked_binary_present() {
         let path = test_process_path().unwrap();
         if !path.exists() {
             println!("Skipping test because the 'test' binary hasn't been built");

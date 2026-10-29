@@ -9,10 +9,7 @@ fn main() {
         panic!("Usage: print_maps <PID>");
     };
 
-    println!(
-        "{:^30} {:^16} {:^7} {}",
-        "ADDRESSES", "SIZE", "MODES", "PATH"
-    );
+    println!("{:^30} {:^16} {:^7} PATH", "ADDRESSES", "SIZE", "MODES");
 
     let empty_path = std::path::Path::new("");
     let maps = proc_maps::get_process_maps(pid).expect("failed to get proc maps");
